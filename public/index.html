@@ -554,14 +554,17 @@
                     layerDiv.appendChild(label);
 
                     const img = document.createElement('img');
-                    img.src = `/api/proxy-image?url=${encodeURIComponent(layer.imageUrl)}`;
+                    // Force proxy usage to avoid CORS issues
+                    const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(layer.imageUrl)}`;
+                    console.log(`Loading via proxy: ${proxyUrl}`);
+                    img.src = proxyUrl;
                     img.alt = layer.name || `Roof imagery layer ${index + 1}`;
                     img.style.maxWidth = '100%';
                     img.style.height = 'auto';
                     img.style.border = '1px solid #ddd';
                     img.style.borderRadius = '4px';
                     img.onload = () => {
-                        console.log(`Loaded ${layer.name || 'layer'}`);
+                        console.log(`Successfully loaded ${layer.name || 'layer'} via proxy`);
                     };
                     img.onerror = () => {
                         console.warn('Failed to load imagery layer:', layer);
@@ -607,7 +610,7 @@
                 <p><strong>v1.1</strong> - Added Malaysian address support with expanded coverage</p>
                 <p><strong>v1.0</strong> - Initial release with standard coverage support</p>
             </div>
-            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: d27c9b5-proxy)</p>
+            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: 0cbc71f-fixed)</p>
         </div>
     </footer>
 </body>
