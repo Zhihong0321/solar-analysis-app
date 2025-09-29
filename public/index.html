@@ -150,18 +150,18 @@
             </div>
             <div class="input-group">
                 <label for="panel-power">Panel Power (W)</label>
-                <input type="number" id="panel-power" value="620" min="100" max="1000" />
+                <input type="number" id="panel-power" value="400" min="100" max="1000" />
             </div>
             <div class="input-group">
                 <label for="panel-width">Panel Width (mm)</label>
-                <input type="number" id="panel-width" value="1134" min="500" max="3000" step="1" />
+                <input type="number" id="panel-width" value="1045" min="500" max="3000" step="1" />
             </div>
         </div>
 
         <div class="input-section">
             <div class="input-group">
                 <label for="panel-height">Panel Height (mm)</label>
-                <input type="number" id="panel-height" value="2278" min="500" max="3000" step="1" />
+                <input type="number" id="panel-height" value="1879" min="500" max="3000" step="1" />
             </div>
             <div class="input-group">
                 <label for="quality-select">Data Quality</label>
@@ -264,9 +264,9 @@
 
         async function analyzeSolar() {
             const address = document.getElementById('address-input').value.trim();
-            const panelPower = parseFloat(document.getElementById('panel-power').value) || 620;
-            const panelWidthMm = parseFloat(document.getElementById('panel-width').value) || 1134;
-            const panelHeightMm = parseFloat(document.getElementById('panel-height').value) || 2278;
+            const panelPower = parseFloat(document.getElementById('panel-power').value) || 400;
+            const panelWidthMm = parseFloat(document.getElementById('panel-width').value) || 1045;
+            const panelHeightMm = parseFloat(document.getElementById('panel-height').value) || 1879;
 
             // Convert millimeters to meters for calculations
             const panelWidth = panelWidthMm / 1000;
@@ -469,8 +469,33 @@
                     return (panel.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? panel : best;
                 });
 
-                maxPanelCount = bestPanel.panelsCount || 0;
-                yearlyEnergyDcKwh = bestPanel.yearlyEnergyDcKwh || 0;
+                // Google's default panel specs from API
+                const googlePanelWatts = 400;
+                const googlePanelArea = 1.879 * 1.045; // m²
+
+                // User's custom panel specs
+                const userPanelWatts = config.panelPower;
+                const userPanelArea = config.panelWidth * config.panelHeight; // m²
+
+                // Calculate scaling factors
+                const powerScaleFactor = userPanelWatts / googlePanelWatts;
+                const areaScaleFactor = userPanelArea / googlePanelArea;
+
+                // Adjust panel count based on area difference
+                const areaBasedPanelCount = Math.floor((bestPanel.panelsCount || 0) * googlePanelArea / userPanelArea);
+
+                maxPanelCount = areaBasedPanelCount;
+                // Scale energy generation based on both panel count and power differences
+                yearlyEnergyDcKwh = (bestPanel.yearlyEnergyDcKwh || 0) * powerScaleFactor * (areaBasedPanelCount / (bestPanel.panelsCount || 1));
+
+                console.log('Panel calculation:', {
+                    googleSpecs: { watts: googlePanelWatts, area: googlePanelArea },
+                    userSpecs: { watts: userPanelWatts, area: userPanelArea },
+                    originalPanels: bestPanel.panelsCount,
+                    adjustedPanels: maxPanelCount,
+                    originalEnergy: bestPanel.yearlyEnergyDcKwh,
+                    adjustedEnergy: yearlyEnergyDcKwh
+                });
             }
 
             // Calculate financial metrics
