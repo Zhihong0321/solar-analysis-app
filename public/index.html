@@ -741,22 +741,16 @@
                 container.removeChild(container.lastChild);
             }
 
-            // Render RGB base layer
-            if (layers.rgb) {
-                const rgbCanvas = renderRGB({
+            // Create composite image combining all layers
+            if (layers.rgb && layers.flux && layers.mask) {
+                // Use RGB as base layer
+                const compositeCanvas = renderRGB({
                     width: layers.rgb.width,
                     height: layers.rgb.height,
                     rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
                 });
 
-                const rgbDiv = document.createElement('div');
-                rgbDiv.innerHTML = '<h5>RGB Aerial Imagery</h5>';
-                rgbDiv.appendChild(rgbCanvas);
-                container.appendChild(rgbDiv);
-            }
-
-            // Render solar flux using palette
-            if (layers.flux) {
+                // Create solar flux overlay with transparency
                 const fluxCanvas = renderPalette({
                     data: {
                         width: layers.flux.width,
@@ -769,33 +763,52 @@
                     index: 0
                 });
 
-                const fluxDiv = document.createElement('div');
-                fluxDiv.innerHTML = `<h5>Solar Flux (${layers.flux.stats.min.toFixed(0)} - ${layers.flux.stats.max.toFixed(0)} kWh/m²/year)</h5>`;
-                fluxDiv.appendChild(fluxCanvas);
-                container.appendChild(fluxDiv);
+                // Overlay solar flux on RGB with transparency
+                const ctx = compositeCanvas.getContext('2d');
+                ctx.globalAlpha = 0.6; // 60% opacity for solar overlay
+                ctx.drawImage(fluxCanvas, 0, 0);
+                ctx.globalAlpha = 1.0; // Reset opacity
+
+                const compositeDiv = document.createElement('div');
+                compositeDiv.innerHTML = `<h5>Solar Analysis Composite (RGB + Solar Flux)</h5>`;
+                compositeDiv.appendChild(compositeCanvas);
+                container.appendChild(compositeDiv);
+            } else {
+                // Fallback to individual layers if not all are available
+                if (layers.rgb) {
+                    const rgbCanvas = renderRGB({
+                        width: layers.rgb.width,
+                        height: layers.rgb.height,
+                        rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
+                    });
+
+                    const rgbDiv = document.createElement('div');
+                    rgbDiv.innerHTML = '<h5>RGB Aerial Imagery</h5>';
+                    rgbDiv.appendChild(rgbCanvas);
+                    container.appendChild(rgbDiv);
+                }
+
+                if (layers.flux) {
+                    const fluxCanvas = renderPalette({
+                        data: {
+                            width: layers.flux.width,
+                            height: layers.flux.height,
+                            rasters: [layers.flux.data]
+                        },
+                        colors: ['0000ff', '00ffff', 'ffff00', 'ff0000'],
+                        min: layers.flux.stats.min,
+                        max: layers.flux.stats.max,
+                        index: 0
+                    });
+
+                    const fluxDiv = document.createElement('div');
+                    fluxDiv.innerHTML = `<h5>Solar Flux (${layers.flux.stats.min.toFixed(0)} - ${layers.flux.stats.max.toFixed(0)} kWh/m²/year)</h5>`;
+                    fluxDiv.appendChild(fluxCanvas);
+                    container.appendChild(fluxDiv);
+                }
             }
 
-            // Render roof mask
-            if (layers.mask) {
-                const maskCanvas = renderPalette({
-                    data: {
-                        width: layers.mask.width,
-                        height: layers.mask.height,
-                        rasters: [layers.mask.data]
-                    },
-                    colors: ['000000', 'ffffff'], // Black to white
-                    min: 0,
-                    max: 1,
-                    index: 0
-                });
-
-                const maskDiv = document.createElement('div');
-                maskDiv.innerHTML = '<h5>Roof Mask</h5>';
-                maskDiv.appendChild(maskCanvas);
-                container.appendChild(maskDiv);
-            }
-
-            // Hide target canvas since we're using separate canvases
+            // Hide target canvas since we're using custom rendering
             targetCanvas.style.display = 'none';
         }
     </script>
