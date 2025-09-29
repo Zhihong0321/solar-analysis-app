@@ -413,6 +413,10 @@
                     if (response.ok) {
                         addStatusMessage(`Retrieved imagery data (${quality} quality)`, 'success');
                         console.log('Imagery data received:', data);
+                        // Handle server wrapper format for BASE quality
+                        if (quality === 'BASE' && data.success && data.data) {
+                            return data.data;
+                        }
                         return data;
                     } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
                         continue;
