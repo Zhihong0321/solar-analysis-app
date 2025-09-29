@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar Analysis Tool</title>
+    <title>Solar Analysis Tool v3.1</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -140,7 +140,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🌞 Solar Analysis Tool</h1>
+        <h1>🌞 Solar Analysis Tool <span style="font-size: 14px; color: #666;">[v3.1]</span></h1>
 
         <div class="input-section">
             <div class="input-group">
@@ -742,7 +742,7 @@
             }
 
             // Create composite image combining all layers
-            if (layers.rgb && layers.flux && layers.mask) {
+            if (layers.rgb && layers.flux) {
                 // Use RGB as base layer
                 const compositeCanvas = renderRGB({
                     width: layers.rgb.width,
@@ -817,13 +817,14 @@
         <div style="max-width: 800px; margin: 0 auto;">
             <h5 style="color: #666; font-size: 14px; margin-bottom: 10px;">Changelog</h5>
             <div style="font-size: 12px; color: #888; line-height: 1.4;">
-                <p><strong>v3.0</strong> (Latest) - Implemented Google's official renderRGB and renderPalette functions for proper GeoTIFF visualization</p>
+                <p><strong>v3.1</strong> (Latest) - Created composite solar visualization combining RGB and flux layers into single image</p>
+                <p><strong>v3.0</strong> - Implemented Google's official renderRGB and renderPalette functions for proper GeoTIFF visualization</p>
                 <p><strong>v2.1</strong> - Fixed imagery display for BASE quality data, Added proper expanded coverage support</p>
                 <p><strong>v2.0</strong> - Fixed expanded coverage API calls to use GET requests instead of POST</p>
                 <p><strong>v1.1</strong> - Added Malaysian address support with expanded coverage</p>
                 <p><strong>v1.0</strong> - Initial release with standard coverage support</p>
             </div>
-            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: v3.0-google-spec)</p>
+            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: v3.1-composite-viz)</p>
         </div>
     </footer>
 </body>
