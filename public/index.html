@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar Analysis Tool v3.1</title>
+    <title>Solar Analysis Tool v3.2</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -140,7 +140,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🌞 Solar Analysis Tool <span style="font-size: 14px; color: #666;">[v3.1]</span></h1>
+        <h1>🌞 Solar Analysis Tool <span style="font-size: 14px; color: #666;">[v3.2]</span></h1>
 
         <div class="input-section">
             <div class="input-group">
@@ -540,58 +540,15 @@
                 return;
             }
 
-            container.innerHTML = '<h4>Roof Imagery & Analysis</h4>';
+            container.innerHTML = '<h4>Solar Imagery Analysis</h4>';
 
-            // Display each layer with labels
-            imageryUrls.forEach((layer, index) => {
-                if (layer.imageUrl) {
-                    const layerDiv = document.createElement('div');
-                    layerDiv.style.marginBottom = '20px';
+            // Create a target canvas for visualization
+            const targetCanvas = document.createElement('canvas');
+            targetCanvas.style.display = 'none'; // Hide initially
+            container.appendChild(targetCanvas);
 
-                    const label = document.createElement('h5');
-                    label.textContent = layer.name || `Layer ${index + 1}`;
-                    label.style.marginBottom = '10px';
-                    layerDiv.appendChild(label);
-
-                    const img = document.createElement('img');
-                    // Use conversion endpoint to convert GeoTIFF to PNG
-                    const convertUrl = `/api/convert-image?url=${encodeURIComponent(layer.imageUrl)}`;
-                    console.log(`Converting GeoTIFF to PNG: ${convertUrl}`);
-                    img.src = convertUrl;
-                    img.alt = layer.name || `Roof imagery layer ${index + 1}`;
-                    img.style.maxWidth = '100%';
-                    img.style.height = 'auto';
-                    img.style.border = '1px solid #ddd';
-                    img.style.borderRadius = '4px';
-                    img.onload = () => {
-                        console.log(`Successfully loaded ${layer.name || 'layer'} via proxy`);
-                    };
-                    img.onerror = () => {
-                        console.warn('GeoTIFF format not displayable in browser:', layer);
-                        img.style.display = 'none';
-                        const downloadLink = document.createElement('a');
-                        downloadLink.href = proxyUrl;
-                        downloadLink.download = `${layer.name.replace(/\s+/g, '_')}.tiff`;
-                        downloadLink.textContent = `📥 Download ${layer.name} (GeoTIFF)`;
-                        downloadLink.style.display = 'inline-block';
-                        downloadLink.style.padding = '8px 12px';
-                        downloadLink.style.backgroundColor = '#007bff';
-                        downloadLink.style.color = 'white';
-                        downloadLink.style.textDecoration = 'none';
-                        downloadLink.style.borderRadius = '4px';
-                        downloadLink.style.margin = '5px';
-                        layerDiv.appendChild(downloadLink);
-
-                        const infoMsg = document.createElement('p');
-                        infoMsg.textContent = `✅ ${layer.name} data retrieved successfully (GeoTIFF format)`;
-                        infoMsg.style.color = '#28a745';
-                        infoMsg.style.fontSize = '14px';
-                        layerDiv.appendChild(infoMsg);
-                    };
-                    layerDiv.appendChild(img);
-                    container.appendChild(layerDiv);
-                }
-            });
+            // Use Google's approach with processGeoTIFFLayers
+            processGeoTIFFLayers(imageryUrls, targetCanvas, targetCanvas.getContext('2d'));
         }
 
         function addStatusMessage(message, type) {
@@ -614,81 +571,93 @@
             currentResults = null;
         }
 
-        // Google's exact renderRGB and renderPalette functions
+        // Google's EXACT implementation from documentation
         function renderRGB(rgb, mask) {
             const canvas = document.createElement('canvas');
+            canvas.width = mask ? mask.width : rgb.width;
+            canvas.height = mask ? mask.height : rgb.height;
+
+            const dw = rgb.width / canvas.width;
+            const dh = rgb.height / canvas.height;
+
             const ctx = canvas.getContext('2d');
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-            canvas.width = rgb.width;
-            canvas.height = rgb.height;
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const rgbIdx = Math.floor(y * dh) * rgb.width + Math.floor(x * dw);
+                    const maskIdx = y * canvas.width + x;
+                    const imgIdx = y * canvas.width * 4 + x * 4;
 
-            const imageData = ctx.createImageData(rgb.width, rgb.height);
-            const data = imageData.data;
-
-            for (let i = 0; i < rgb.width * rgb.height; i++) {
-                const pixelIndex = i * 4;
-                data[pixelIndex] = rgb.rasters[0][i];     // Red
-                data[pixelIndex + 1] = rgb.rasters[1][i]; // Green
-                data[pixelIndex + 2] = rgb.rasters[2][i]; // Blue
-                data[pixelIndex + 3] = mask ? (mask.rasters[0][i] * 255) : 255; // Alpha
+                    img.data[imgIdx + 0] = rgb.rasters[0][rgbIdx]; // Red
+                    img.data[imgIdx + 1] = rgb.rasters[1][rgbIdx]; // Green
+                    img.data[imgIdx + 2] = rgb.rasters[2][rgbIdx]; // Blue
+                    img.data[imgIdx + 3] = mask
+                        ? mask.rasters[0][maskIdx] * 255
+                        : 255;
+                }
             }
 
-            ctx.putImageData(imageData, 0, 0);
+            ctx.putImageData(img, 0, 0);
             return canvas;
         }
 
-        function createPalette(colors) {
-            const palette = [];
-            const steps = 256;
+        function colorToRGB(color) {
+            const hex = color.startsWith('#') ? color.slice(1) : color;
+            return {
+                r: parseInt(hex.substring(0, 2), 16),
+                g: parseInt(hex.substring(2, 4), 16),
+                b: parseInt(hex.substring(4, 6), 16),
+            };
+        }
 
-            for (let i = 0; i < steps; i++) {
-                const ratio = i / (steps - 1);
-                const colorIndex = ratio * (colors.length - 1);
-                const lowerIndex = Math.floor(colorIndex);
-                const upperIndex = Math.ceil(colorIndex);
-                const t = colorIndex - lowerIndex;
+        function normalize(x, max = 1, min = 0) {
+            const y = (x - min) / (max - min);
+            return clamp(y, 0, 1);
+        }
 
-                const lowerColor = hexToRgb(colors[lowerIndex]);
-                const upperColor = hexToRgb(colors[upperIndex]);
+        function lerp(x, y, t) {
+            return x + t * (y - x);
+        }
 
-                palette.push({
-                    r: Math.round(lowerColor.r + t * (upperColor.r - lowerColor.r)),
-                    g: Math.round(lowerColor.g + t * (upperColor.g - lowerColor.g)),
-                    b: Math.round(lowerColor.b + t * (upperColor.b - lowerColor.b))
+        function clamp(x, min, max) {
+            return Math.min(Math.max(x, min), max);
+        }
+
+        function createPalette(hexColors) {
+            const rgb = hexColors.map(colorToRGB);
+            const size = 256;
+            const step = (rgb.length - 1) / (size - 1);
+            return Array(size)
+                .fill(0)
+                .map((_, i) => {
+                    const index = i * step;
+                    const lower = Math.floor(index);
+                    const upper = Math.ceil(index);
+                    return {
+                        r: lerp(rgb[lower].r, rgb[upper].r, index - lower),
+                        g: lerp(rgb[lower].g, rgb[upper].g, index - lower),
+                        b: lerp(rgb[lower].b, rgb[upper].b, index - lower),
+                    };
                 });
-            }
-
-            return palette;
         }
 
-        function hexToRgb(hex) {
-            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result ? {
-                r: parseInt(result[1], 16),
-                g: parseInt(result[2], 16),
-                b: parseInt(result[3], 16)
-            } : null;
-        }
-
-        function normalize(value, max, min) {
-            return Math.max(0, Math.min(1, (value - min) / (max - min)));
-        }
-
-        function renderPalette({ data, mask, colors = ['000000', 'ffffff'], min = 0, max = 1, index = 0 }) {
-            const palette = createPalette(colors);
-            const indices = data.rasters[index]
-                .map(x => x === -9999 ? 0 : normalize(x, max, min))
-                .map(x => Math.round(x * (palette.length - 1)));
-
-            return renderRGB({
-                width: data.width,
-                height: data.height,
-                rasters: [
-                    indices.map(i => palette[i].r),
-                    indices.map(i => palette[i].g),
-                    indices.map(i => palette[i].b)
-                ]
-            }, mask);
+        function renderPalette({ data, mask, colors, min, max, index }) {
+            const palette = createPalette(colors ?? ['000000', 'ffffff']);
+            const indices = data.rasters[index ?? 0]
+                .map((x) => normalize(x, max ?? 1, min ?? 0))
+                .map((x) => Math.round(x * (palette.length - 1)));
+            return renderRGB(
+                {
+                    ...data,
+                    rasters: [
+                        indices.map((i) => palette[i].r),
+                        indices.map((i) => palette[i].g),
+                        indices.map((i) => palette[i].b),
+                    ],
+                },
+                mask,
+            );
         }
 
         // Process GeoTIFF layers using Google's approach
@@ -736,84 +705,86 @@
         function renderLayers(layers, targetCanvas, targetCtx) {
             const container = targetCanvas.parentElement;
 
-            // Clear existing content
+            // Clear existing content except the title
             while (container.children.length > 1) {
                 container.removeChild(container.lastChild);
             }
 
-            // Debug logging
-            console.log('Available layers:', {
-                rgb: !!layers.rgb,
-                flux: !!layers.flux,
-                mask: !!layers.mask
-            });
+            console.log('Rendering layers using Google approach:', Object.keys(layers));
 
-            // Create composite image - prioritize showing single composite
-            if (layers.rgb && layers.flux) {
-                console.log('Creating composite with RGB + flux');
-
-                // Use RGB as base layer
-                const compositeCanvas = renderRGB({
+            // Render RGB layer if available
+            if (layers.rgb) {
+                const rgbData = {
                     width: layers.rgb.width,
                     height: layers.rgb.height,
                     rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
-                });
+                };
 
-                // Create solar flux overlay with transparency
+                const rgbCanvas = renderRGB(rgbData);
+
+                const rgbDiv = document.createElement('div');
+                rgbDiv.style.marginBottom = '20px';
+                const rgbTitle = document.createElement('h5');
+                rgbTitle.textContent = 'RGB Aerial Imagery';
+                rgbTitle.style.margin = '0 0 10px 0';
+                rgbDiv.appendChild(rgbTitle);
+                rgbDiv.appendChild(rgbCanvas);
+                container.appendChild(rgbDiv);
+            }
+
+            // Render Solar Flux layer if available
+            if (layers.flux) {
+                const fluxData = {
+                    width: layers.flux.width,
+                    height: layers.flux.height,
+                    rasters: [layers.flux.data]
+                };
+
                 const fluxCanvas = renderPalette({
-                    data: {
-                        width: layers.flux.width,
-                        height: layers.flux.height,
-                        rasters: [layers.flux.data]
-                    },
+                    data: fluxData,
                     colors: ['0000ff', '00ffff', 'ffff00', 'ff0000'],
                     min: layers.flux.stats.min,
                     max: layers.flux.stats.max,
                     index: 0
                 });
 
-                // Overlay solar flux on RGB with transparency
-                const ctx = compositeCanvas.getContext('2d');
-                ctx.globalAlpha = 0.6;
-                ctx.drawImage(fluxCanvas, 0, 0);
-                ctx.globalAlpha = 1.0;
-
-                const compositeDiv = document.createElement('div');
-                compositeDiv.innerHTML = `<h5>🌞 Composite Solar Analysis (RGB + Solar Flux)</h5>`;
-                compositeDiv.appendChild(compositeCanvas);
-                container.appendChild(compositeDiv);
-
-                // Show just this one - return early to skip individual layers
-                targetCanvas.style.display = 'none';
-                return;
-
-            } else if (layers.rgb) {
-                console.log('Creating RGB-only composite');
-
-                const rgbCanvas = renderRGB({
-                    width: layers.rgb.width,
-                    height: layers.rgb.height,
-                    rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
-                });
-
-                const compositeDiv = document.createElement('div');
-                compositeDiv.innerHTML = `<h5>🌞 RGB Aerial Imagery</h5>`;
-                compositeDiv.appendChild(rgbCanvas);
-                container.appendChild(compositeDiv);
-
-                targetCanvas.style.display = 'none';
-                return;
-
-            } else {
-                console.log('No composite possible - no sufficient layers');
-                const errorDiv = document.createElement('div');
-                errorDiv.innerHTML = '<h5>⚠️ Insufficient data for visualization</h5><p>Need RGB and/or solar flux data</p>';
-                container.appendChild(errorDiv);
-                targetCanvas.style.display = 'none';
-                return;
+                const fluxDiv = document.createElement('div');
+                fluxDiv.style.marginBottom = '20px';
+                const fluxTitle = document.createElement('h5');
+                fluxTitle.textContent = `Annual Solar Flux (${layers.flux.stats.min.toFixed(0)} - ${layers.flux.stats.max.toFixed(0)} kWh/m²/year)`;
+                fluxTitle.style.margin = '0 0 10px 0';
+                fluxDiv.appendChild(fluxTitle);
+                fluxDiv.appendChild(fluxCanvas);
+                container.appendChild(fluxDiv);
             }
 
-            // Hide target canvas since we're using custom rendering
+            // Render Roof Mask if available
+            if (layers.mask) {
+                const maskData = {
+                    width: layers.mask.width,
+                    height: layers.mask.height,
+                    rasters: [layers.mask.data]
+                };
+
+                const maskCanvas = renderPalette({
+                    data: maskData,
+                    colors: ['000000', 'ffffff'],
+                    min: 0,
+                    max: 1,
+                    index: 0
+                });
+
+                const maskDiv = document.createElement('div');
+                maskDiv.style.marginBottom = '20px';
+                const maskTitle = document.createElement('h5');
+                maskTitle.textContent = 'Roof Mask';
+                maskTitle.style.margin = '0 0 10px 0';
+                maskDiv.appendChild(maskTitle);
+                maskDiv.appendChild(maskCanvas);
+                container.appendChild(maskDiv);
+            }
+
+            // Hide the original target canvas
             targetCanvas.style.display = 'none';
         }
     </script>
@@ -822,14 +793,15 @@
         <div style="max-width: 800px; margin: 0 auto;">
             <h5 style="color: #666; font-size: 14px; margin-bottom: 10px;">Changelog</h5>
             <div style="font-size: 12px; color: #888; line-height: 1.4;">
-                <p><strong>v3.1</strong> (Latest) - Created composite solar visualization combining RGB and flux layers into single image</p>
+                <p><strong>v3.2</strong> (Latest) - Implemented Google's EXACT Solar API specification with proper renderRGB and renderPalette functions</p>
+                <p><strong>v3.1</strong> - Created composite solar visualization combining RGB and flux layers into single image</p>
                 <p><strong>v3.0</strong> - Implemented Google's official renderRGB and renderPalette functions for proper GeoTIFF visualization</p>
                 <p><strong>v2.1</strong> - Fixed imagery display for BASE quality data, Added proper expanded coverage support</p>
                 <p><strong>v2.0</strong> - Fixed expanded coverage API calls to use GET requests instead of POST</p>
                 <p><strong>v1.1</strong> - Added Malaysian address support with expanded coverage</p>
                 <p><strong>v1.0</strong> - Initial release with standard coverage support</p>
             </div>
-            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: v3.1-composite-viz)</p>
+            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: v3.2-google-spec-exact)</p>
         </div>
     </footer>
 </body>
