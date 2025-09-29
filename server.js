@@ -167,12 +167,12 @@ app.post('/api/solar/imagery', async (req, res) => {
 
                 if (quality === 'BASE') {
                     // GET request for BASE quality with expanded coverage
-                    const url = `https://solar.googleapis.com/v1/dataLayers:get?location.latitude=${lat}&location.longitude=${lng}&radiusMeters=100&view=IMAGERY_QUALITY&requiredQuality=BASE&experiments=EXPANDED_COVERAGE&key=${GOOGLE_API_KEY}`;
+                    const url = `https://solar.googleapis.com/v1/dataLayers:get?location.latitude=${lat}&location.longitude=${lng}&radiusMeters=100&requiredQuality=BASE&experiments=EXPANDED_COVERAGE&key=${GOOGLE_API_KEY}`;
 
                     response = await fetch(url);
                 } else {
                     // GET request for HIGH/MEDIUM quality
-                    const url = `https://solar.googleapis.com/v1/dataLayers:get?location.latitude=${lat}&location.longitude=${lng}&radiusMeters=100&view=IMAGERY_QUALITY&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
+                    const url = `https://solar.googleapis.com/v1/dataLayers:get?location.latitude=${lat}&location.longitude=${lng}&radiusMeters=100&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
 
                     response = await fetch(url);
                 }
