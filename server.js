@@ -3,6 +3,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
 const path = require('path');
+const sharp = require('sharp');
 require('dotenv').config();
 
 const app = express();
@@ -244,6 +245,52 @@ app.get('/api/proxy-image', async (req, res) => {
     } catch (error) {
         console.error('Image proxy error:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Convert GeoTIFF to PNG endpoint
+app.get('/api/convert-image', async (req, res) => {
+    try {
+        const { url } = req.query;
+
+        if (!url) {
+            return res.status(400).json({ error: 'URL parameter required' });
+        }
+
+        console.log('Converting GeoTIFF to PNG for URL:', url);
+
+        // Add API key to the URL
+        const imageUrl = `${url}&key=${GOOGLE_API_KEY}`;
+        const response = await fetch(imageUrl);
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: 'Failed to fetch image' });
+        }
+
+        // Get the image buffer
+        const buffer = await response.arrayBuffer();
+        const inputBuffer = Buffer.from(buffer);
+
+        console.log('Original image size:', inputBuffer.length, 'bytes');
+
+        // Convert GeoTIFF to PNG using Sharp
+        const pngBuffer = await sharp(inputBuffer)
+            .png()
+            .toBuffer();
+
+        console.log('Converted PNG size:', pngBuffer.length, 'bytes');
+
+        // Set appropriate headers for PNG
+        res.set({
+            'Content-Type': 'image/png',
+            'Cache-Control': 'public, max-age=3600'
+        });
+
+        res.send(pngBuffer);
+
+    } catch (error) {
+        console.error('Image conversion error:', error);
+        res.status(500).json({ error: 'Failed to convert image: ' + error.message });
     }
 });
 

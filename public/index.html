@@ -554,10 +554,10 @@
                     layerDiv.appendChild(label);
 
                     const img = document.createElement('img');
-                    // Force proxy usage to avoid CORS issues
-                    const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(layer.imageUrl)}`;
-                    console.log(`Loading via proxy: ${proxyUrl}`);
-                    img.src = proxyUrl;
+                    // Use conversion endpoint to convert GeoTIFF to PNG
+                    const convertUrl = `/api/convert-image?url=${encodeURIComponent(layer.imageUrl)}`;
+                    console.log(`Converting GeoTIFF to PNG: ${convertUrl}`);
+                    img.src = convertUrl;
                     img.alt = layer.name || `Roof imagery layer ${index + 1}`;
                     img.style.maxWidth = '100%';
                     img.style.height = 'auto';
@@ -567,12 +567,26 @@
                         console.log(`Successfully loaded ${layer.name || 'layer'} via proxy`);
                     };
                     img.onerror = () => {
-                        console.warn('Failed to load imagery layer:', layer);
+                        console.warn('GeoTIFF format not displayable in browser:', layer);
                         img.style.display = 'none';
-                        const errorMsg = document.createElement('p');
-                        errorMsg.textContent = `Failed to load ${layer.name || 'imagery'}`;
-                        errorMsg.style.color = '#666';
-                        layerDiv.appendChild(errorMsg);
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = proxyUrl;
+                        downloadLink.download = `${layer.name.replace(/\s+/g, '_')}.tiff`;
+                        downloadLink.textContent = `📥 Download ${layer.name} (GeoTIFF)`;
+                        downloadLink.style.display = 'inline-block';
+                        downloadLink.style.padding = '8px 12px';
+                        downloadLink.style.backgroundColor = '#007bff';
+                        downloadLink.style.color = 'white';
+                        downloadLink.style.textDecoration = 'none';
+                        downloadLink.style.borderRadius = '4px';
+                        downloadLink.style.margin = '5px';
+                        layerDiv.appendChild(downloadLink);
+
+                        const infoMsg = document.createElement('p');
+                        infoMsg.textContent = `✅ ${layer.name} data retrieved successfully (GeoTIFF format)`;
+                        infoMsg.style.color = '#28a745';
+                        infoMsg.style.fontSize = '14px';
+                        layerDiv.appendChild(infoMsg);
                     };
                     layerDiv.appendChild(img);
                     container.appendChild(layerDiv);
