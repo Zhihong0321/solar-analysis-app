@@ -301,6 +301,13 @@
                 const imageryData = await getImageryData(geocodeResult.lat, geocodeResult.lng);
 
                 // Step 4: Calculate results
+                console.log('About to calculate solar metrics with:', {
+                    hasBuildingInsights: !!buildingInsights,
+                    buildingInsightsType: typeof buildingInsights,
+                    buildingInsightsKeys: buildingInsights ? Object.keys(buildingInsights) : [],
+                    hasImageryData: !!imageryData
+                });
+
                 const results = calculateSolarMetrics(buildingInsights, imageryData, {
                     panelPower,
                     panelWidth,
@@ -740,6 +747,65 @@
             document.getElementById('address-input').value = '';
             clearStatusMessages();
             currentResults = null;
+        }
+
+        async function getBuildingInsights(lat, lng) {
+            try {
+                const response = await fetch('/api/solar/building-insights', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ lat, lng })
+                });
+
+                const result = await response.json();
+
+                console.log('Building insights response:', {
+                    success: result.success,
+                    quality: result.quality,
+                    hasData: !!result.data,
+                    dataKeys: result.data ? Object.keys(result.data) : []
+                });
+
+                if (result.success && result.data) {
+                    addStatusMessage(`Found solar data (${result.quality} quality)`, 'success');
+                    return result.data;
+                } else {
+                    throw new Error(result.error || 'Failed to get building insights');
+                }
+            } catch (error) {
+                console.error('Building insights error:', error);
+                throw new Error(`Failed to get building insights: ${error.message}`);
+            }
+        }
+
+        async function getImageryData(lat, lng) {
+            try {
+                const response = await fetch('/api/solar/imagery', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ lat, lng })
+                });
+
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    return {
+                        rgbUrl: result.data.rgbUrl,
+                        annualFluxUrl: result.data.annualFluxUrl,
+                        maskUrl: result.data.maskUrl
+                    };
+                } else {
+                    console.warn('No imagery data available');
+                    return null;
+                }
+            } catch (error) {
+                console.error('Imagery error:', error);
+                return null;
+            }
         }
 
         // Google's EXACT implementation from documentation
