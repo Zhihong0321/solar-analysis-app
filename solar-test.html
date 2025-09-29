@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Solar API Test</title>
+</head>
+<body>
+    <h1>Solar API Test</h1>
+    <button onclick="testAPI()">Test Solar API</button>
+    <div id="result"></div>
+
+    <script>
+        const API_KEY = 'AIzaSyCrLcxkBYE1_Duo2hGsyzo3ir-nJm7OnkE';
+        
+        async function testAPI() {
+            const lat = 1.352083;
+            const lng = 103.819836;
+            
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                // Test GET request first
+                const getUrl = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=MEDIUM&key=${API_KEY}`;
+                console.log('Testing GET URL:', getUrl);
+                
+                const response = await fetch(getUrl);
+                const data = await response.json();
+                
+                result.innerHTML = `<h3>GET Response:</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+            } catch (error) {
+                console.error('GET Error:', error);
+                
+                try {
+                    // Try POST with BASE quality
+                    const postUrl = `https://solar.googleapis.com/v1/buildingInsights:findClosest?key=${API_KEY}`;
+                    console.log('Testing POST URL:', postUrl);
+                    
+                    const postResponse = await fetch(postUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            location: { latitude: lat, longitude: lng },
+                            requiredQuality: 'BASE',
+                            experiments: ['EXPANDED_COVERAGE']
+                        })
+                    });
+                    
+                    const postData = await postResponse.json();
+                    result.innerHTML = `<h3>POST Response:</h3><pre>${JSON.stringify(postData, null, 2)}</pre>`;
+                    
+                } catch (postError) {
+                    result.innerHTML = `<h3>Both GET and POST failed:</h3>
+                        <p>GET Error: ${error.message}</p>
+                        <p>POST Error: ${postError.message}</p>
+                        <p>Check browser console for CORS details</p>`;
+                    console.error('POST Error:', postError);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

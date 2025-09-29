@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Analysis Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .input-section {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 15px;
+            align-items: end;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            height: fit-content;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .status.success { background-color: #d4edda; color: #155724; }
+        .status.error { background-color: #f8d7da; color: #721c24; }
+        .status.info { background-color: #d1ecf1; color: #0c5460; }
+        .results {
+            display: none;
+            margin-top: 20px;
+        }
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .result-card {
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        .result-card h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .metric {
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .metric-label {
+            font-weight: bold;
+        }
+        .imagery-section {
+            grid-column: 1 / -1;
+            text-align: center;
+        }
+        .imagery-section img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin: 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .hidden { display: none; }
+        .server-info {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #0c5460;
+        }
+        @media (max-width: 768px) {
+            .input-section {
+                grid-template-columns: 1fr;
+            }
+            .result-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌞 Solar Analysis Tool</h1>
+
+        <div class="server-info">
+            <div id="server-status">🔄 Checking server status...</div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <label for="address-input">Address</label>
+                <input type="text" id="address-input" placeholder="Enter street address" />
+            </div>
+            <div class="input-group">
+                <label for="panel-power">Panel Power (W)</label>
+                <input type="number" id="panel-power" value="620" min="100" max="1000" />
+            </div>
+            <div class="input-group">
+                <label for="panel-width">Panel Width (mm)</label>
+                <input type="number" id="panel-width" value="1134" min="500" max="3000" step="1" />
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <label for="panel-height">Panel Height (mm)</label>
+                <input type="number" id="panel-height" value="2278" min="500" max="3000" step="1" />
+            </div>
+            <div></div>
+            <button id="analyze-btn" onclick="analyzeSolar()">Analyze Solar Potential</button>
+        </div>
+
+        <div id="status-messages"></div>
+
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Analyzing solar potential...</p>
+        </div>
+    </div>
+
+    <div id="results" class="container results">
+        <h2>Solar Analysis Results</h2>
+
+        <div class="result-grid">
+            <div class="result-card">
+                <h3>Location Information</h3>
+                <div class="metric">
+                    <span class="metric-label">Address:</span>
+                    <span id="result-address">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Coordinates:</span>
+                    <span id="result-coords">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Data Quality:</span>
+                    <span id="result-quality">-</span>
+                </div>
+            </div>
+
+            <div class="result-card">
+                <h3>Solar Potential</h3>
+                <div class="metric">
+                    <span class="metric-label">Roof Area:</span>
+                    <span id="result-area">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Max Panel Count:</span>
+                    <span id="result-panels">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Yearly Energy:</span>
+                    <span id="result-energy">-</span>
+                </div>
+            </div>
+
+            <div class="result-card">
+                <h3>Financial Estimates</h3>
+                <div class="metric">
+                    <span class="metric-label">Installation Cost:</span>
+                    <span id="result-cost">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Annual Savings:</span>
+                    <span id="result-savings">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Payback Period:</span>
+                    <span id="result-payback">-</span>
+                </div>
+            </div>
+
+            <div class="result-card">
+                <h3>Environmental Impact</h3>
+                <div class="metric">
+                    <span class="metric-label">CO₂ Offset:</span>
+                    <span id="result-co2">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Equivalent Trees:</span>
+                    <span id="result-trees">-</span>
+                </div>
+            </div>
+
+            <div class="result-card imagery-section">
+                <h3>Roof Imagery & Analysis</h3>
+                <div id="imagery-container">
+                    <p>High-resolution roof imagery will appear here</p>
+                </div>
+            </div>
+        </div>
+
+        <button onclick="resetApp()">Analyze Another Address</button>
+    </div>
+
+    <script>
+        let currentResults = null;
+
+        // Check server health on page load
+        window.addEventListener('load', checkServerHealth);
+
+        async function checkServerHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const health = await response.json();
+
+                const statusEl = document.getElementById('server-status');
+                if (health.status === 'healthy') {
+                    statusEl.innerHTML = `✅ Server ready | API Key: ${health.env.hasApiKey ? '✓' : '✗'} | Signing Secret: ${health.env.hasSigningSecret ? '✓' : '✗'}`;
+                    statusEl.style.backgroundColor = '#d4edda';
+                    statusEl.style.color = '#155724';
+                } else {
+                    statusEl.innerHTML = '❌ Server not ready';
+                    statusEl.style.backgroundColor = '#f8d7da';
+                    statusEl.style.color = '#721c24';
+                }
+            } catch (error) {
+                const statusEl = document.getElementById('server-status');
+                statusEl.innerHTML = '❌ Cannot connect to server';
+                statusEl.style.backgroundColor = '#f8d7da';
+                statusEl.style.color = '#721c24';
+            }
+        }
+
+        async function analyzeSolar() {
+            const address = document.getElementById('address-input').value.trim();
+            const panelPower = parseFloat(document.getElementById('panel-power').value) || 620;
+            const panelWidthMm = parseFloat(document.getElementById('panel-width').value) || 1134;
+            const panelHeightMm = parseFloat(document.getElementById('panel-height').value) || 2278;
+
+            // Convert millimeters to meters for calculations
+            const panelWidth = panelWidthMm / 1000;
+            const panelHeight = panelHeightMm / 1000;
+
+            if (!address) {
+                addStatusMessage('Please enter an address', 'error');
+                return;
+            }
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').style.display = 'none';
+            clearStatusMessages();
+
+            try {
+                // Step 1: Geocode the address
+                addStatusMessage('Geocoding address...', 'info');
+                const geocodeResult = await geocodeAddress(address);
+
+                if (!geocodeResult.success) {
+                    throw new Error(geocodeResult.error);
+                }
+
+                addStatusMessage(`Found coordinates: ${geocodeResult.lat}, ${geocodeResult.lng}`, 'success');
+
+                // Step 2: Get building insights
+                addStatusMessage('Analyzing building solar potential...', 'info');
+                const buildingInsights = await getBuildingInsights(geocodeResult.lat, geocodeResult.lng);
+
+                // Step 3: Get imagery data
+                addStatusMessage('Fetching roof imagery...', 'info');
+                const imageryData = await getImageryData(geocodeResult.lat, geocodeResult.lng);
+
+                // Step 4: Calculate results
+                const results = calculateSolarMetrics(buildingInsights, imageryData, {
+                    panelPower,
+                    panelWidth,
+                    panelHeight,
+                    address: geocodeResult.formattedAddress,
+                    lat: geocodeResult.lat,
+                    lng: geocodeResult.lng
+                });
+
+                displayResults(results);
+                addStatusMessage('Analysis complete!', 'success');
+
+            } catch (error) {
+                addStatusMessage(`Error: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        async function geocodeAddress(address) {
+            try {
+                const response = await fetch('/api/geocode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ address })
+                });
+
+                return await response.json();
+            } catch (error) {
+                return {
+                    success: false,
+                    error: `Network error: ${error.message}`
+                };
+            }
+        }
+
+        async function getBuildingInsights(lat, lng) {
+            try {
+                const response = await fetch('/api/solar/building-insights', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ lat, lng })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addStatusMessage(`Found solar data (${result.quality} quality - ${result.qualityInfo})`, 'success');
+                    return result.data;
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                throw new Error(`Failed to get building insights: ${error.message}`);
+            }
+        }
+
+        async function getImageryData(lat, lng) {
+            try {
+                const response = await fetch('/api/solar/imagery', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ lat, lng })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addStatusMessage(`Retrieved imagery data (${result.quality} quality)`, 'success');
+                    return result.data;
+                } else {
+                    console.warn('Failed to get imagery data');
+                    return null;
+                }
+            } catch (error) {
+                console.warn('Failed to get imagery data:', error.message);
+                return null;
+            }
+        }
+
+        function calculateSolarMetrics(buildingInsights, imageryData, config) {
+            const panelArea = config.panelWidth * config.panelHeight; // m²
+
+            // Extract data from Solar API response
+            const roofSegmentSummaries = buildingInsights.solarPotential?.roofSegmentStats || [];
+            const solarPanels = buildingInsights.solarPotential?.solarPanels || [];
+            const financialAnalyses = buildingInsights.solarPotential?.financialAnalyses || [];
+
+            // Calculate totals
+            let totalRoofArea = 0;
+            let maxPanelCount = 0;
+            let yearlyEnergyDcKwh = 0;
+
+            roofSegmentSummaries.forEach(segment => {
+                if (segment.stats) {
+                    totalRoofArea += segment.stats.areaM2 || 0;
+                }
+            });
+
+            // Find the best configuration from solar panels
+            if (solarPanels.length > 0) {
+                const bestPanel = solarPanels.reduce((best, panel) => {
+                    return (panel.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? panel : best;
+                });
+
+                maxPanelCount = bestPanel.panelsCount || 0;
+                yearlyEnergyDcKwh = bestPanel.yearlyEnergyDcKwh || 0;
+            }
+
+            // Calculate financial metrics
+            let installationCost = 0;
+            let annualSavings = 0;
+            let paybackYears = 0;
+
+            if (financialAnalyses.length > 0) {
+                const bestFinancial = financialAnalyses[0];
+                installationCost = bestFinancial.upfrontCost?.value || maxPanelCount * 1000; // Fallback estimate
+                annualSavings = bestFinancial.savings?.savingsYear1?.value || yearlyEnergyDcKwh * 0.12; // Fallback rate
+                paybackYears = installationCost / (annualSavings || 1);
+            }
+
+            // Environmental calculations
+            const co2OffsetKg = yearlyEnergyDcKwh * 0.4; // kg CO2 per kWh
+            const equivalentTrees = Math.round(co2OffsetKg / 21); // Average tree absorbs ~21kg CO2/year
+
+            return {
+                address: config.address,
+                lat: config.lat,
+                lng: config.lng,
+                buildingArea: totalRoofArea,
+                maxPanelCount: maxPanelCount,
+                yearlyEnergyKwh: yearlyEnergyDcKwh,
+                installationCost: installationCost,
+                annualSavings: annualSavings,
+                paybackYears: paybackYears,
+                co2OffsetKg: co2OffsetKg,
+                equivalentTrees: equivalentTrees,
+                imageryUrls: imageryData?.imageryLayers || [],
+                rawBuildingInsights: buildingInsights,
+                rawImageryData: imageryData
+            };
+        }
+
+        function displayResults(results) {
+            currentResults = results;
+
+            // Location info
+            document.getElementById('result-address').textContent = results.address;
+            document.getElementById('result-coords').textContent = `${results.lat.toFixed(6)}, ${results.lng.toFixed(6)}`;
+            document.getElementById('result-quality').textContent = 'Google Solar API';
+
+            // Solar potential
+            document.getElementById('result-area').textContent = `${results.buildingArea.toFixed(1)} m²`;
+            document.getElementById('result-panels').textContent = `${results.maxPanelCount} panels`;
+            document.getElementById('result-energy').textContent = `${results.yearlyEnergyKwh.toFixed(0)} kWh/year`;
+
+            // Financial
+            document.getElementById('result-cost').textContent = `$${results.installationCost.toLocaleString()}`;
+            document.getElementById('result-savings').textContent = `$${results.annualSavings.toFixed(0)}/year`;
+            document.getElementById('result-payback').textContent = `${results.paybackYears.toFixed(1)} years`;
+
+            // Environmental
+            document.getElementById('result-co2').textContent = `${results.co2OffsetKg.toFixed(0)} kg/year`;
+            document.getElementById('result-trees').textContent = `${results.equivalentTrees} trees`;
+
+            // Display imagery
+            displayImagery(results.imageryUrls);
+
+            document.getElementById('results').style.display = 'block';
+        }
+
+        function displayImagery(imageryUrls) {
+            const container = document.getElementById('imagery-container');
+
+            if (!imageryUrls || imageryUrls.length === 0) {
+                container.innerHTML = '<p>High-resolution imagery not available for this location</p>';
+                return;
+            }
+
+            container.innerHTML = '<p>Loading roof imagery...</p>';
+
+            // Try to display RGB imagery if available
+            imageryUrls.forEach((layer, index) => {
+                if (layer.imageUrl) {
+                    const img = document.createElement('img');
+                    img.src = layer.imageUrl; // Server handles URL signing
+                    img.alt = `Roof imagery layer ${index + 1}`;
+                    img.onload = () => {
+                        if (container.innerHTML.includes('Loading')) {
+                            container.innerHTML = '';
+                        }
+                        container.appendChild(img);
+                    };
+                    img.onerror = () => {
+                        console.warn('Failed to load imagery layer:', layer);
+                    };
+                }
+            });
+        }
+
+        function addStatusMessage(message, type) {
+            const statusDiv = document.getElementById('status-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `status ${type}`;
+            messageDiv.textContent = message;
+            statusDiv.appendChild(messageDiv);
+            statusDiv.scrollTop = statusDiv.scrollHeight;
+        }
+
+        function clearStatusMessages() {
+            document.getElementById('status-messages').innerHTML = '';
+        }
+
+        function resetApp() {
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('address-input').value = '';
+            clearStatusMessages();
+            currentResults = null;
+        }
+    </script>
+</body>
+</html>
