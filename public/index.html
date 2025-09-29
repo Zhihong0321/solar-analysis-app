@@ -592,7 +592,7 @@
                     img.data[imgIdx + 0] = rgb.rasters[0][rgbIdx]; // Red
                     img.data[imgIdx + 1] = rgb.rasters[1][rgbIdx]; // Green
                     img.data[imgIdx + 2] = rgb.rasters[2][rgbIdx]; // Blue
-                    img.data[imgIdx + 3] = mask
+                    img.data[imgIdx + 3] = mask && mask.rasters && mask.rasters[0]
                         ? mask.rasters[0][maskIdx] * 255
                         : 255;
                 }
@@ -678,6 +678,11 @@
                     console.log(`Processing ${layer.name} as ${layerType}`);
 
                     const response = await fetch(`/api/process-geotiff?url=${encodeURIComponent(layer.imageUrl)}&layer=${layerType}`);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
                     const data = await response.json();
 
                     if (data.success) {
@@ -720,7 +725,7 @@
                     rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
                 };
 
-                const rgbCanvas = renderRGB(rgbData);
+                const rgbCanvas = renderRGB(rgbData, undefined);
 
                 const rgbDiv = document.createElement('div');
                 rgbDiv.style.marginBottom = '20px';
