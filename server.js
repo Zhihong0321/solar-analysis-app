@@ -108,7 +108,20 @@ app.post('/api/solar/building-insights', async (req, res) => {
                     response = await fetch(url);
                 }
 
-                data = await response.json();
+                // Log response details for debugging
+                console.log(`Building Insights API Response Status: ${response.status} for quality: ${quality}`);
+                console.log(`API Response Headers:`, response.headers.get('content-type'));
+
+                const responseText = await response.text();
+                console.log(`API Response Body (first 200 chars):`, responseText.substring(0, 200));
+
+                try {
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error(`JSON Parse Error for quality ${quality}:`, parseError.message);
+                    console.error(`Response text:`, responseText);
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+                }
 
                 if (response.ok) {
                     const qualityInfo = quality === 'HIGH' ? '0.1m/pixel aerial' :
