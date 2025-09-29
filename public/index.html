@@ -350,9 +350,9 @@
         }
 
         async function getBuildingInsights(lat, lng) {
-            // Use selected quality level
+            // Use selected quality level, but for Malaysia always try BASE first
             const selectedQuality = document.getElementById('quality-select').value;
-            const qualityLevels = [selectedQuality];
+            const qualityLevels = selectedQuality === 'BASE' ? ['BASE'] : [selectedQuality, 'BASE'];
 
             for (const quality of qualityLevels) {
                 try {
@@ -396,9 +396,9 @@
         }
 
         async function getImageryData(lat, lng) {
-            // Use selected quality level
+            // Use selected quality level, but for Malaysia always try BASE first
             const selectedQuality = document.getElementById('quality-select').value;
-            const qualityLevels = [selectedQuality];
+            const qualityLevels = selectedQuality === 'BASE' ? ['BASE'] : [selectedQuality, 'BASE'];
 
             for (const quality of qualityLevels) {
                 try {
@@ -447,8 +447,16 @@
         function calculateSolarMetrics(buildingInsights, imageryData, config) {
             const panelArea = config.panelWidth * config.panelHeight; // m²
 
-            // Validate buildingInsights data
-            if (!buildingInsights || !buildingInsights.solarPotential) {
+            // Debug the buildingInsights structure
+            console.log('Building insights validation:', {
+                hasBuildingInsights: !!buildingInsights,
+                hasSolarPotential: !!buildingInsights?.solarPotential,
+                solarPotentialKeys: buildingInsights?.solarPotential ? Object.keys(buildingInsights.solarPotential) : [],
+                buildingInsightsKeys: buildingInsights ? Object.keys(buildingInsights) : []
+            });
+
+            // Only validate if absolutely no data
+            if (!buildingInsights || !buildingInsights.solarPotential || !buildingInsights.solarPotential.solarPanelConfigs) {
                 console.error('Solar potential data not available for this location');
                 return {
                     address: config.address,
