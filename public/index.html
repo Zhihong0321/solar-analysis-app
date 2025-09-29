@@ -128,14 +128,6 @@
             100% { transform: rotate(360deg); }
         }
         .hidden { display: none; }
-        .server-info {
-            background-color: #e7f3ff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-            color: #0c5460;
-        }
         @media (max-width: 768px) {
             .input-section {
                 grid-template-columns: 1fr;
@@ -149,10 +141,6 @@
 <body>
     <div class="container">
         <h1>🌞 Solar Analysis Tool</h1>
-
-        <div class="server-info">
-            <div id="server-status">🔄 Checking server status...</div>
-        </div>
 
         <div class="input-section">
             <div class="input-group">
@@ -201,16 +189,16 @@
                     <span id="result-coords">-</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Data Quality:</span>
-                    <span id="result-quality">-</span>
+                    <span class="metric-label">Building Area:</span>
+                    <span id="result-area">-</span>
                 </div>
             </div>
 
             <div class="result-card">
                 <h3>Solar Potential</h3>
                 <div class="metric">
-                    <span class="metric-label">Roof Area:</span>
-                    <span id="result-area">-</span>
+                    <span class="metric-label">Annual Solar Flux:</span>
+                    <span id="result-flux">-</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Max Panel Count:</span>
@@ -262,33 +250,9 @@
     </div>
 
     <script>
+        const GOOGLE_API_KEY = 'AIzaSyCrLcxkBYE1_Duo2hGsyzo3ir-nJm7OnkE';
+
         let currentResults = null;
-
-        // Check server health on page load
-        window.addEventListener('load', checkServerHealth);
-
-        async function checkServerHealth() {
-            try {
-                const response = await fetch('/api/health');
-                const health = await response.json();
-
-                const statusEl = document.getElementById('server-status');
-                if (health.status === 'healthy') {
-                    statusEl.innerHTML = `✅ Server ready | API Key: ${health.env.hasApiKey ? '✓' : '✗'} | Signing Secret: ${health.env.hasSigningSecret ? '✓' : '✗'}`;
-                    statusEl.style.backgroundColor = '#d4edda';
-                    statusEl.style.color = '#155724';
-                } else {
-                    statusEl.innerHTML = '❌ Server not ready';
-                    statusEl.style.backgroundColor = '#f8d7da';
-                    statusEl.style.color = '#721c24';
-                }
-            } catch (error) {
-                const statusEl = document.getElementById('server-status');
-                statusEl.innerHTML = '❌ Cannot connect to server';
-                statusEl.style.backgroundColor = '#f8d7da';
-                statusEl.style.color = '#721c24';
-            }
-        }
 
         async function analyzeSolar() {
             const address = document.getElementById('address-input').value.trim();
@@ -349,16 +313,26 @@
         }
 
         async function geocodeAddress(address) {
-            try {
-                const response = await fetch('/api/geocode', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ address })
-                });
+            const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_API_KEY}`;
 
-                return await response.json();
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status === 'OK' && data.results.length > 0) {
+                    const result = data.results[0];
+                    return {
+                        success: true,
+                        lat: result.geometry.location.lat,
+                        lng: result.geometry.location.lng,
+                        formattedAddress: result.formatted_address
+                    };
+                } else {
+                    return {
+                        success: false,
+                        error: `Geocoding failed: ${data.status}`
+                    };
+                }
             } catch (error) {
                 return {
                     success: false,
@@ -368,51 +342,83 @@
         }
 
         async function getBuildingInsights(lat, lng) {
-            try {
-                const response = await fetch('/api/solar/building-insights', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ lat, lng })
-                });
+            // Try HIGH, MEDIUM, then BASE (experimental) quality levels
+            const qualityLevels = ['HIGH', 'MEDIUM', 'BASE'];
 
-                const result = await response.json();
+            for (const quality of qualityLevels) {
+                try {
+                    let response, data;
 
-                if (result.success) {
-                    addStatusMessage(`Found solar data (${result.quality} quality - ${result.qualityInfo})`, 'success');
-                    return result.data;
-                } else {
-                    throw new Error(result.error);
+                    if (quality === 'BASE') {
+                        // For BASE quality, route through server to avoid CORS
+                        const url = `/api/building-insights?lat=${lat}&lng=${lng}&quality=${quality}`;
+                        response = await fetch(url);
+                    } else {
+                        // For HIGH and MEDIUM quality, use GET request
+                        const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
+                        response = await fetch(url);
+                    }
+
+                    data = await response.json();
+
+                    if (response.ok) {
+                        const qualityInfo = quality === 'HIGH' ? '0.1m/pixel aerial' :
+                                          quality === 'MEDIUM' ? '0.25m/pixel aerial' :
+                                          '0.25m/pixel satellite (experimental)';
+                        addStatusMessage(`Found solar data (${quality} quality - ${qualityInfo})`, 'success');
+                        return data;
+                    } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
+                        addStatusMessage(`${quality} quality data not available, trying ${quality === 'HIGH' ? 'MEDIUM' : 'BASE (experimental)'}...`, 'info');
+                        continue;
+                    } else {
+                        throw new Error(`Solar API error: ${data.error?.message || response.status}`);
+                    }
+                } catch (error) {
+                    if (quality === 'BASE') {
+                        throw new Error(`Failed to get building insights: ${error.message}`);
+                    }
+                    continue;
                 }
-            } catch (error) {
-                throw new Error(`Failed to get building insights: ${error.message}`);
             }
         }
 
         async function getImageryData(lat, lng) {
-            try {
-                const response = await fetch('/api/solar/imagery', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ lat, lng })
-                });
+            // Try HIGH, MEDIUM, then BASE (experimental) quality levels
+            const qualityLevels = ['HIGH', 'MEDIUM', 'BASE'];
 
-                const result = await response.json();
+            for (const quality of qualityLevels) {
+                try {
+                    let response, data;
 
-                if (result.success) {
-                    addStatusMessage(`Retrieved imagery data (${result.quality} quality)`, 'success');
-                    return result.data;
-                } else {
-                    console.warn('Failed to get imagery data');
-                    return null;
+                    if (quality === 'BASE') {
+                        // For BASE quality, route through server to avoid CORS
+                        const url = `/api/imagery-data?lat=${lat}&lng=${lng}&quality=${quality}`;
+                        response = await fetch(url);
+                    } else {
+                        // For HIGH and MEDIUM quality, use GET request
+                        const url = `https://solar.googleapis.com/v1/dataLayers:get?location.latitude=${lat}&location.longitude=${lng}&radiusMeters=100&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
+                        response = await fetch(url);
+                    }
+
+                    data = await response.json();
+
+                    if (response.ok) {
+                        addStatusMessage(`Retrieved imagery data (${quality} quality)`, 'success');
+                        return data;
+                    } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
+                        continue;
+                    } else {
+                        console.warn('Failed to get imagery data:', data.error?.message);
+                        if (quality === 'BASE') return null;
+                        continue;
+                    }
+                } catch (error) {
+                    console.warn('Failed to get imagery data:', error.message);
+                    if (quality === 'BASE') return null;
+                    continue;
                 }
-            } catch (error) {
-                console.warn('Failed to get imagery data:', error.message);
-                return null;
             }
+            return null;
         }
 
         function calculateSolarMetrics(buildingInsights, imageryData, config) {
@@ -472,7 +478,11 @@
                 paybackYears: paybackYears,
                 co2OffsetKg: co2OffsetKg,
                 equivalentTrees: equivalentTrees,
-                imageryUrls: imageryData?.imageryLayers || [],
+                imageryUrls: imageryData ? [
+                    { name: 'RGB Imagery', imageUrl: imageryData.rgbUrl },
+                    { name: 'Annual Solar Flux', imageUrl: imageryData.annualFluxUrl },
+                    { name: 'Roof Mask', imageUrl: imageryData.maskUrl }
+                ].filter(layer => layer.imageUrl) : [],
                 rawBuildingInsights: buildingInsights,
                 rawImageryData: imageryData
             };
@@ -484,10 +494,10 @@
             // Location info
             document.getElementById('result-address').textContent = results.address;
             document.getElementById('result-coords').textContent = `${results.lat.toFixed(6)}, ${results.lng.toFixed(6)}`;
-            document.getElementById('result-quality').textContent = 'Google Solar API';
+            document.getElementById('result-area').textContent = `${results.buildingArea.toFixed(1)} m²`;
 
             // Solar potential
-            document.getElementById('result-area').textContent = `${results.buildingArea.toFixed(1)} m²`;
+            document.getElementById('result-flux').textContent = 'Calculated from roof analysis';
             document.getElementById('result-panels').textContent = `${results.maxPanelCount} panels`;
             document.getElementById('result-energy').textContent = `${results.yearlyEnergyKwh.toFixed(0)} kWh/year`;
 
@@ -514,23 +524,39 @@
                 return;
             }
 
-            container.innerHTML = '<p>Loading roof imagery...</p>';
+            container.innerHTML = '<h4>Roof Imagery & Analysis</h4>';
 
-            // Try to display RGB imagery if available
+            // Display each layer with labels
             imageryUrls.forEach((layer, index) => {
                 if (layer.imageUrl) {
+                    const layerDiv = document.createElement('div');
+                    layerDiv.style.marginBottom = '20px';
+
+                    const label = document.createElement('h5');
+                    label.textContent = layer.name || `Layer ${index + 1}`;
+                    label.style.marginBottom = '10px';
+                    layerDiv.appendChild(label);
+
                     const img = document.createElement('img');
-                    img.src = layer.imageUrl; // Server handles URL signing
-                    img.alt = `Roof imagery layer ${index + 1}`;
+                    img.src = `${layer.imageUrl}&key=${GOOGLE_API_KEY}`;
+                    img.alt = layer.name || `Roof imagery layer ${index + 1}`;
+                    img.style.maxWidth = '100%';
+                    img.style.height = 'auto';
+                    img.style.border = '1px solid #ddd';
+                    img.style.borderRadius = '4px';
                     img.onload = () => {
-                        if (container.innerHTML.includes('Loading')) {
-                            container.innerHTML = '';
-                        }
-                        container.appendChild(img);
+                        console.log(`Loaded ${layer.name || 'layer'}`);
                     };
                     img.onerror = () => {
                         console.warn('Failed to load imagery layer:', layer);
+                        img.style.display = 'none';
+                        const errorMsg = document.createElement('p');
+                        errorMsg.textContent = `Failed to load ${layer.name || 'imagery'}`;
+                        errorMsg.style.color = '#666';
+                        layerDiv.appendChild(errorMsg);
                     };
+                    layerDiv.appendChild(img);
+                    container.appendChild(layerDiv);
                 }
             });
         }
@@ -555,5 +581,18 @@
             currentResults = null;
         }
     </script>
+
+    <footer style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-top: 1px solid #dee2e6;">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <h5 style="color: #666; font-size: 14px; margin-bottom: 10px;">Changelog</h5>
+            <div style="font-size: 12px; color: #888; line-height: 1.4;">
+                <p><strong>v2.1</strong> (Latest) - Fixed imagery display for BASE quality data, Added proper expanded coverage support</p>
+                <p><strong>v2.0</strong> - Fixed expanded coverage API calls to use GET requests instead of POST</p>
+                <p><strong>v1.1</strong> - Added Malaysian address support with expanded coverage</p>
+                <p><strong>v1.0</strong> - Initial release with standard coverage support</p>
+            </div>
+            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: db5de32)</p>
+        </div>
+    </footer>
 </body>
 </html>
