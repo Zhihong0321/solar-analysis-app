@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const fetch = require('node-fetch');
 const path = require('path');
 const sharp = require('sharp');
-const GeoTIFF = require('geotiff');
 require('dotenv').config();
 
 const app = express();
@@ -249,7 +248,7 @@ app.get('/api/proxy-image', async (req, res) => {
     }
 });
 
-// Process GeoTIFF data endpoint
+// Process TIFF data using Sharp endpoint
 app.get('/api/process-geotiff', async (req, res) => {
     try {
         const { url, layer } = req.query;
@@ -258,57 +257,88 @@ app.get('/api/process-geotiff', async (req, res) => {
             return res.status(400).json({ error: 'URL parameter required' });
         }
 
-        console.log('Processing GeoTIFF data for URL:', url, 'Layer:', layer);
+        console.log('Processing TIFF data for URL:', url, 'Layer:', layer);
 
         // Add API key to the URL
         const imageUrl = `${url}&key=${GOOGLE_API_KEY}`;
         const response = await fetch(imageUrl);
 
         if (!response.ok) {
-            return res.status(response.status).json({ error: 'Failed to fetch GeoTIFF' });
+            return res.status(response.status).json({ error: 'Failed to fetch TIFF' });
         }
 
-        // Get the GeoTIFF buffer
+        // Get the TIFF buffer
         const buffer = await response.arrayBuffer();
-        console.log('GeoTIFF size:', buffer.byteLength, 'bytes');
+        const inputBuffer = Buffer.from(buffer);
+        console.log('TIFF size:', buffer.byteLength, 'bytes');
 
-        // Parse GeoTIFF
-        const tiff = await GeoTIFF.fromArrayBuffer(buffer);
-        const image = await tiff.getImage();
+        // Use Sharp to extract metadata and pixel data
+        const image = sharp(inputBuffer);
+        const metadata = await image.metadata();
 
-        console.log('Image dimensions:', await image.getWidth(), 'x', await image.getHeight());
-        console.log('Samples per pixel:', await image.getSamplesPerPixel());
+        console.log('Image dimensions:', metadata.width, 'x', metadata.height);
+        console.log('Channels:', metadata.channels);
 
-        // For RGB layer, return directly
+        // For RGB layer, extract RGB channels
         if (layer === 'rgb') {
-            const rgbData = await image.readRasters();
-            const width = await image.getWidth();
-            const height = await image.getHeight();
+            const { data, info } = await image
+                .ensureAlpha(false)
+                .raw()
+                .toBuffer({ resolveWithObject: true });
 
-            return res.json({
-                success: true,
-                type: 'rgb',
-                width: width,
-                height: height,
-                data: {
-                    red: Array.from(rgbData[0]),
-                    green: Array.from(rgbData[1]),
-                    blue: Array.from(rgbData[2])
+            const width = info.width;
+            const height = info.height;
+            const channels = info.channels;
+
+            if (channels >= 3) {
+                const red = [];
+                const green = [];
+                const blue = [];
+
+                for (let i = 0; i < data.length; i += channels) {
+                    red.push(data[i]);
+                    green.push(data[i + 1]);
+                    blue.push(data[i + 2]);
                 }
-            });
+
+                return res.json({
+                    success: true,
+                    type: 'rgb',
+                    width: width,
+                    height: height,
+                    data: { red, green, blue }
+                });
+            }
         }
 
-        // For other layers (flux, mask), process as single band
-        const rasterData = await image.readRasters();
-        const width = await image.getWidth();
-        const height = await image.getHeight();
-        const values = Array.from(rasterData[0]);
+        // For single-band data (flux, mask), extract first channel
+        const { data, info } = await image
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const width = info.width;
+        const height = info.height;
+        const values = [];
+
+        // Extract values based on data type
+        if (metadata.format === 'tiff') {
+            // For single channel, take every pixel
+            const step = info.channels;
+            for (let i = 0; i < data.length; i += step) {
+                values.push(data[i]);
+            }
+        } else {
+            // For other formats, use all data
+            for (let i = 0; i < data.length; i++) {
+                values.push(data[i]);
+            }
+        }
 
         // Calculate statistics for proper visualization
-        const validValues = values.filter(v => v !== -9999 && !isNaN(v));
-        const min = Math.min(...validValues);
-        const max = Math.max(...validValues);
-        const mean = validValues.reduce((a, b) => a + b, 0) / validValues.length;
+        const validValues = values.filter(v => v !== 255 && v !== 0 && !isNaN(v)); // Filter common invalid values
+        const min = validValues.length > 0 ? Math.min(...validValues) : 0;
+        const max = validValues.length > 0 ? Math.max(...validValues) : 255;
+        const mean = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : 0;
 
         console.log(`Layer stats - Min: ${min}, Max: ${max}, Mean: ${mean.toFixed(2)}`);
 
@@ -323,8 +353,8 @@ app.get('/api/process-geotiff', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('GeoTIFF processing error:', error);
-        res.status(500).json({ error: 'Failed to process GeoTIFF: ' + error.message });
+        console.error('TIFF processing error:', error);
+        res.status(500).json({ error: 'Failed to process TIFF: ' + error.message });
     }
 });
 
