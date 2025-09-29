@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Address Geocoding Tool</title>
+    <title>Solar Analysis Tool</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -17,25 +17,34 @@
             padding: 30px;
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
         }
         h1 {
             color: #333;
             text-align: center;
+            margin-bottom: 30px;
         }
-        .upload-area {
-            border: 2px dashed #ccc;
-            border-radius: 10px;
-            padding: 40px;
-            text-align: center;
-            margin: 20px 0;
-            background-color: #fafafa;
+        .input-section {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 15px;
+            align-items: end;
+            margin-bottom: 20px;
         }
-        .upload-area.dragover {
-            border-color: #007bff;
-            background-color: #e7f3ff;
+        .input-group {
+            display: flex;
+            flex-direction: column;
         }
-        input[type="file"] {
-            margin: 20px 0;
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
         }
         button {
             background-color: #007bff;
@@ -45,7 +54,7 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
-            margin: 10px 5px;
+            height: fit-content;
         }
         button:hover {
             background-color: #0056b3;
@@ -53,23 +62,6 @@
         button:disabled {
             background-color: #ccc;
             cursor: not-allowed;
-        }
-        .progress-container {
-            display: none;
-            margin: 20px 0;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background-color: #e0e0e0;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background-color: #28a745;
-            width: 0%;
-            transition: width 0.3s ease;
         }
         .status {
             margin: 10px 0;
@@ -81,265 +73,243 @@
         .status.info { background-color: #d1ecf1; color: #0c5460; }
         .results {
             display: none;
-            margin: 20px 0;
+            margin-top: 20px;
         }
-        .result-stats {
+        .result-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
-            margin: 20px 0;
+            margin-bottom: 20px;
         }
-        .stat-card {
+        .result-card {
             padding: 20px;
+            border: 1px solid #ddd;
             border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        .result-card h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .metric {
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .metric-label {
+            font-weight: bold;
+        }
+        .imagery-section {
+            grid-column: 1 / -1;
             text-align: center;
         }
-        .stat-card.success { background-color: #d4edda; }
-        .stat-card.error { background-color: #f8d7da; }
-        .stat-number {
-            font-size: 2em;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .download-section {
-            margin: 20px 0;
-            padding: 20px;
-            background-color: #f8f9fa;
+        .imagery-section img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
             border-radius: 8px;
+            margin: 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         .hidden { display: none; }
+        @media (max-width: 768px) {
+            .input-section {
+                grid-template-columns: 1fr;
+            }
+            .result-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Address Geocoding Tool</h1>
+        <h1>🌞 Solar Analysis Tool</h1>
 
-        <!-- Upload Section -->
-        <div id="upload-section">
-            <div class="upload-area" id="upload-area">
-                <p>Drag and drop your TSV file here, or click to select</p>
-                <input type="file" id="file-input" accept=".tsv,.txt" />
+        <div class="input-section">
+            <div class="input-group">
+                <label for="address-input">Address</label>
+                <input type="text" id="address-input" placeholder="Enter street address" />
             </div>
-            <button id="process-btn" disabled onclick="processFile()">Process Addresses</button>
-        </div>
-
-        <!-- Processing Section -->
-        <div id="processing-section" class="hidden">
-            <h2>Processing Addresses...</h2>
-            <div class="progress-container">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill"></div>
-                </div>
-                <div id="progress-text">0 / 0 processed</div>
+            <div class="input-group">
+                <label for="panel-power">Panel Power (W)</label>
+                <input type="number" id="panel-power" value="620" min="100" max="1000" />
             </div>
-            <div id="status-messages"></div>
-        </div>
-
-        <!-- Results Section -->
-        <div id="results-section" class="hidden">
-            <h2>Processing Complete!</h2>
-            <div class="result-stats">
-                <div class="stat-card success">
-                    <div class="stat-number" id="success-count">0</div>
-                    <div>Successfully Geocoded</div>
-                </div>
-                <div class="stat-card error">
-                    <div class="stat-number" id="failed-count">0</div>
-                    <div>Failed to Geocode</div>
-                </div>
-            </div>
-
-            <div class="download-section">
-                <h3>Download Results</h3>
-                <button id="download-success" onclick="downloadSuccessFile()">Download Successful Geocodes</button>
-                <button id="download-failed" onclick="downloadFailedFile()">Download Failed Addresses</button>
-                <button onclick="resetApp()">Process Another File</button>
+            <div class="input-group">
+                <label for="panel-width">Panel Width (mm)</label>
+                <input type="number" id="panel-width" value="1134" min="500" max="3000" step="1" />
             </div>
         </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <label for="panel-height">Panel Height (mm)</label>
+                <input type="number" id="panel-height" value="2278" min="500" max="3000" step="1" />
+            </div>
+            <div></div>
+            <button id="analyze-btn" onclick="analyzeSolar()">Analyze Solar Potential</button>
+        </div>
+
+        <div id="status-messages"></div>
+
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Analyzing solar potential...</p>
+        </div>
+    </div>
+
+    <div id="results" class="container results">
+        <h2>Solar Analysis Results</h2>
+
+        <div class="result-grid">
+            <div class="result-card">
+                <h3>Location Information</h3>
+                <div class="metric">
+                    <span class="metric-label">Address:</span>
+                    <span id="result-address">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Coordinates:</span>
+                    <span id="result-coords">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Building Area:</span>
+                    <span id="result-area">-</span>
+                </div>
+            </div>
+
+            <div class="result-card">
+                <h3>Solar Potential</h3>
+                <div class="metric">
+                    <span class="metric-label">Annual Solar Flux:</span>
+                    <span id="result-flux">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Max Panel Count:</span>
+                    <span id="result-panels">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Yearly Energy:</span>
+                    <span id="result-energy">-</span>
+                </div>
+            </div>
+
+            <div class="result-card">
+                <h3>Financial Estimates</h3>
+                <div class="metric">
+                    <span class="metric-label">Installation Cost:</span>
+                    <span id="result-cost">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Annual Savings:</span>
+                    <span id="result-savings">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Payback Period:</span>
+                    <span id="result-payback">-</span>
+                </div>
+            </div>
+
+            <div class="result-card">
+                <h3>Environmental Impact</h3>
+                <div class="metric">
+                    <span class="metric-label">CO₂ Offset:</span>
+                    <span id="result-co2">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Equivalent Trees:</span>
+                    <span id="result-trees">-</span>
+                </div>
+            </div>
+
+            <div class="result-card imagery-section">
+                <h3>Roof Imagery & Analysis</h3>
+                <div id="imagery-container">
+                    <p>High-resolution roof imagery will appear here</p>
+                </div>
+            </div>
+        </div>
+
+        <button onclick="resetApp()">Analyze Another Address</button>
     </div>
 
     <script>
         const GOOGLE_API_KEY = 'AIzaSyCrLcxkBYE1_Duo2hGsyzo3ir-nJm7OnkE';
-        let csvData = [];
-        let successResults = [];
-        let failedResults = [];
-        let currentFile = null;
 
-        // File upload handling
-        const fileInput = document.getElementById('file-input');
-        const uploadArea = document.getElementById('upload-area');
-        const processBtn = document.getElementById('process-btn');
+        let currentResults = null;
 
-        uploadArea.addEventListener('click', () => fileInput.click());
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        });
+        async function analyzeSolar() {
+            const address = document.getElementById('address-input').value.trim();
+            const panelPower = parseFloat(document.getElementById('panel-power').value) || 620;
+            const panelWidthMm = parseFloat(document.getElementById('panel-width').value) || 1134;
+            const panelHeightMm = parseFloat(document.getElementById('panel-height').value) || 2278;
 
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
-        });
+            // Convert millimeters to meters for calculations
+            const panelWidth = panelWidthMm / 1000;
+            const panelHeight = panelHeightMm / 1000;
 
-        function handleFile(file) {
-            const validExtensions = ['.tsv', '.txt'];
-            const isValid = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-            if (!isValid) {
-                addStatusMessage('Please select a TSV file (.tsv or .txt)', 'error');
+            if (!address) {
+                addStatusMessage('Please enter an address', 'error');
                 return;
             }
 
-            currentFile = file;
-            processBtn.disabled = false;
-            addStatusMessage(`File selected: ${file.name}`, 'success');
-        }
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').style.display = 'none';
+            clearStatusMessages();
 
-        function parseTSV(text) {
-            // Handle files with or without newlines at the end
-            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            try {
+                // Step 1: Geocode the address
+                addStatusMessage('Geocoding address...', 'info');
+                const geocodeResult = await geocodeAddress(address);
 
-            // If no newlines found, treat the entire text as one line
-            if (lines.length === 0 && text.trim().length > 0) {
-                lines.push(text.trim());
-            }
-
-            if (lines.length === 0) return { headers: [], data: [] };
-
-            // For simplicity, assume no headers and generate column names
-            const firstLine = lines[0].split('\t');
-            const headers = firstLine.map((_, index) => `column_${index + 1}`);
-            const startIndex = 0;
-
-            const data = [];
-            for (let i = startIndex; i < lines.length; i++) {
-                const values = lines[i].split('\t').map(v => v.trim());
-                if (values.length === headers.length) {
-                    const row = {};
-                    headers.forEach((header, index) => {
-                        row[header] = values[index];
-                    });
-                    data.push(row);
-                }
-            }
-
-            return { headers, data };
-        }
-
-        async function processFile() {
-            if (!currentFile) return;
-
-            document.getElementById('upload-section').classList.add('hidden');
-            document.getElementById('processing-section').classList.remove('hidden');
-
-            const text = await currentFile.text();
-            console.log('Raw file text:', JSON.stringify(text));
-            const parsed = parseTSV(text);
-            console.log('Parsed data:', parsed);
-            csvData = parsed.data;
-
-            addStatusMessage(`Found ${csvData.length} addresses to process`, 'info');
-            addStatusMessage(`File content preview: ${text.substring(0, 100)}`, 'info');
-
-            successResults = [];
-            failedResults = [];
-
-            await processAddresses();
-        }
-
-        async function processAddresses() {
-            const total = csvData.length;
-
-            for (let i = 0; i < total; i++) {
-                const row = csvData[i];
-                const address = findAddressField(row);
-
-                if (!address) {
-                    failedResults.push({
-                        ...row,
-                        failure_reason: 'No address field found'
-                    });
-                    updateProgress(i + 1, total);
-                    continue;
+                if (!geocodeResult.success) {
+                    throw new Error(geocodeResult.error);
                 }
 
-                try {
-                    const result = await geocodeAddress(address);
-                    if (result.success) {
-                        // Extract postal code from address if not found in API response
-                        let extractedPostalCode = result.postalCode;
-                        if (!extractedPostalCode) {
-                            const postalMatch = address.match(/\b\d{5}\b/);
-                            extractedPostalCode = postalMatch ? postalMatch[0] : '';
-                        }
+                addStatusMessage(`Found coordinates: ${geocodeResult.lat}, ${geocodeResult.lng}`, 'success');
 
-                        // Format coordinates
-                        const formattedLng = result.lng.toFixed(8).padStart(12, '0');
-                        const formattedLat = result.lat.toFixed(8).padStart(11, '0');
+                // Step 2: Get building insights
+                addStatusMessage('Analyzing building solar potential...', 'info');
+                const buildingInsights = await getBuildingInsights(geocodeResult.lat, geocodeResult.lng);
 
-                        successResults.push({
-                            ...row,
-                            Province: result.province || '',
-                            'Postal Code': extractedPostalCode || '',
-                            Longitude: formattedLng,
-                            Latitude: formattedLat
-                        });
-                    } else {
-                        failedResults.push({
-                            ...row,
-                            failure_reason: result.error
-                        });
-                    }
-                } catch (error) {
-                    failedResults.push({
-                        ...row,
-                        failure_reason: `API Error: ${error.message}`
-                    });
-                }
+                // Step 3: Get imagery data
+                addStatusMessage('Fetching roof imagery...', 'info');
+                const imageryData = await getImageryData(geocodeResult.lat, geocodeResult.lng);
 
-                updateProgress(i + 1, total);
+                // Step 4: Calculate results
+                const results = calculateSolarMetrics(buildingInsights, imageryData, {
+                    panelPower,
+                    panelWidth,
+                    panelHeight,
+                    address: geocodeResult.formattedAddress,
+                    lat: geocodeResult.lat,
+                    lng: geocodeResult.lng
+                });
 
-                // Small delay to avoid overwhelming the API
-                await new Promise(resolve => setTimeout(resolve, 100));
+                displayResults(results);
+                addStatusMessage('Analysis complete!', 'success');
+
+            } catch (error) {
+                addStatusMessage(`Error: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
             }
-
-            showResults();
-        }
-
-        function findAddressField(row) {
-            // First try standard address field names
-            const addressFields = ['address', 'Address', 'ADDRESS', 'street', 'Street', 'location', 'Location'];
-            for (const field of addressFields) {
-                if (row[field] && row[field].trim()) {
-                    return row[field].trim();
-                }
-            }
-
-            // For files without headers, check column_3 (which should be the address based on your sample)
-            if (row['column_3'] && row['column_3'].trim()) {
-                return row['column_3'].trim();
-            }
-
-            // If no standard field, try to find any field that might contain an address
-            for (const [key, value] of Object.entries(row)) {
-                if (value && typeof value === 'string' && value.length > 10 &&
-                    (value.includes(',') || value.includes('Jalan') || value.includes('Street'))) {
-                    return value.trim();
-                }
-            }
-
-            return null;
         }
 
         async function geocodeAddress(address) {
@@ -351,29 +321,11 @@
 
                 if (data.status === 'OK' && data.results.length > 0) {
                     const result = data.results[0];
-                    const location = result.geometry.location;
-
-                    // Extract province and postal code from address components
-                    let province = '';
-                    let postalCode = '';
-
-                    if (result.address_components) {
-                        for (const component of result.address_components) {
-                            if (component.types.includes('administrative_area_level_1')) {
-                                province = component.long_name;
-                            }
-                            if (component.types.includes('postal_code')) {
-                                postalCode = component.long_name;
-                            }
-                        }
-                    }
-
                     return {
                         success: true,
-                        lat: location.lat,
-                        lng: location.lng,
-                        province: province,
-                        postalCode: postalCode
+                        lat: result.geometry.location.lat,
+                        lng: result.geometry.location.lng,
+                        formattedAddress: result.formatted_address
                     };
                 } else {
                     return {
@@ -389,71 +341,224 @@
             }
         }
 
-        function updateProgress(current, total) {
-            const percentage = (current / total) * 100;
-            document.getElementById('progress-fill').style.width = `${percentage}%`;
-            document.getElementById('progress-text').textContent = `${current} / ${total} processed`;
-        }
+        async function getBuildingInsights(lat, lng) {
+            // Try HIGH, MEDIUM, then BASE (experimental) quality levels
+            const qualityLevels = ['HIGH', 'MEDIUM', 'BASE'];
 
-        function showResults() {
-            document.getElementById('processing-section').classList.add('hidden');
-            document.getElementById('results-section').classList.remove('hidden');
+            for (const quality of qualityLevels) {
+                try {
+                    let response, data;
 
-            document.getElementById('success-count').textContent = successResults.length;
-            document.getElementById('failed-count').textContent = failedResults.length;
+                    if (quality === 'BASE') {
+                        // For BASE quality, route through server to avoid CORS
+                        const url = `/api/building-insights?lat=${lat}&lng=${lng}&quality=${quality}`;
+                        response = await fetch(url);
+                    } else {
+                        // For HIGH and MEDIUM quality, use GET request
+                        const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
+                        response = await fetch(url);
+                    }
 
-            addStatusMessage(`Processing complete! ${successResults.length} successful, ${failedResults.length} failed`, 'success');
-        }
+                    data = await response.json();
 
-        function downloadSuccessFile() {
-            if (successResults.length === 0) {
-                addStatusMessage('No successful results to download', 'error');
-                return;
+                    if (response.ok) {
+                        const qualityInfo = quality === 'HIGH' ? '0.1m/pixel aerial' :
+                                          quality === 'MEDIUM' ? '0.25m/pixel aerial' :
+                                          '0.25m/pixel satellite (experimental)';
+                        addStatusMessage(`Found solar data (${quality} quality - ${qualityInfo})`, 'success');
+                        return data;
+                    } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
+                        addStatusMessage(`${quality} quality data not available, trying ${quality === 'HIGH' ? 'MEDIUM' : 'BASE (experimental)'}...`, 'info');
+                        continue;
+                    } else {
+                        throw new Error(`Solar API error: ${data.error?.message || response.status}`);
+                    }
+                } catch (error) {
+                    if (quality === 'BASE') {
+                        throw new Error(`Failed to get building insights: ${error.message}`);
+                    }
+                    continue;
+                }
             }
-
-            const tsv = convertToTSV(successResults);
-            downloadTSV(tsv, 'geocoded_addresses_success.tsv');
         }
 
-        function downloadFailedFile() {
-            if (failedResults.length === 0) {
-                addStatusMessage('No failed results to download', 'info');
-                return;
+        async function getImageryData(lat, lng) {
+            // Try HIGH, MEDIUM, then BASE (experimental) quality levels
+            const qualityLevels = ['HIGH', 'MEDIUM', 'BASE'];
+
+            for (const quality of qualityLevels) {
+                try {
+                    let response, data;
+
+                    if (quality === 'BASE') {
+                        // For BASE quality, route through server to avoid CORS
+                        const url = `/api/imagery-data?lat=${lat}&lng=${lng}&quality=${quality}`;
+                        response = await fetch(url);
+                    } else {
+                        // For HIGH and MEDIUM quality, use GET request
+                        const url = `https://solar.googleapis.com/v1/dataLayers:get?location.latitude=${lat}&location.longitude=${lng}&radiusMeters=100&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
+                        response = await fetch(url);
+                    }
+
+                    data = await response.json();
+
+                    if (response.ok) {
+                        addStatusMessage(`Retrieved imagery data (${quality} quality)`, 'success');
+                        return data;
+                    } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
+                        continue;
+                    } else {
+                        console.warn('Failed to get imagery data:', data.error?.message);
+                        if (quality === 'BASE') return null;
+                        continue;
+                    }
+                } catch (error) {
+                    console.warn('Failed to get imagery data:', error.message);
+                    if (quality === 'BASE') return null;
+                    continue;
+                }
             }
-
-            const tsv = convertToTSV(failedResults);
-            downloadTSV(tsv, 'geocoded_addresses_failed.tsv');
+            return null;
         }
 
-        function convertToTSV(data) {
-            if (data.length === 0) return '';
+        function calculateSolarMetrics(buildingInsights, imageryData, config) {
+            const panelArea = config.panelWidth * config.panelHeight; // m²
 
-            // Get original columns first, then add new columns in specific order
-            const originalColumns = ['column_1', 'column_2', 'column_3', 'column_4'];
-            const newColumns = ['Province', 'Postal Code', 'Longitude', 'Latitude'];
-            const headers = [...originalColumns, ...newColumns];
+            // Extract data from Solar API response
+            const roofSegmentSummaries = buildingInsights.solarPotential?.roofSegmentStats || [];
+            const solarPanels = buildingInsights.solarPotential?.solarPanels || [];
+            const financialAnalyses = buildingInsights.solarPotential?.financialAnalyses || [];
 
-            const tsvRows = [headers.join('\t')];
+            // Calculate totals
+            let totalRoofArea = 0;
+            let maxPanelCount = 0;
+            let yearlyEnergyDcKwh = 0;
 
-            for (const row of data) {
-                const values = headers.map(header => {
-                    const value = row[header] || '';
-                    return value.toString().replace(/\t/g, ' ');
+            roofSegmentSummaries.forEach(segment => {
+                if (segment.stats) {
+                    totalRoofArea += segment.stats.areaM2 || 0;
+                }
+            });
+
+            // Find the best configuration from solar panels
+            if (solarPanels.length > 0) {
+                const bestPanel = solarPanels.reduce((best, panel) => {
+                    return (panel.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? panel : best;
                 });
-                tsvRows.push(values.join('\t'));
+
+                maxPanelCount = bestPanel.panelsCount || 0;
+                yearlyEnergyDcKwh = bestPanel.yearlyEnergyDcKwh || 0;
             }
 
-            return tsvRows.join('\n');
+            // Calculate financial metrics
+            let installationCost = 0;
+            let annualSavings = 0;
+            let paybackYears = 0;
+
+            if (financialAnalyses.length > 0) {
+                const bestFinancial = financialAnalyses[0];
+                installationCost = bestFinancial.upfrontCost?.value || maxPanelCount * 1000; // Fallback estimate
+                annualSavings = bestFinancial.savings?.savingsYear1?.value || yearlyEnergyDcKwh * 0.12; // Fallback rate
+                paybackYears = installationCost / (annualSavings || 1);
+            }
+
+            // Environmental calculations
+            const co2OffsetKg = yearlyEnergyDcKwh * 0.4; // kg CO2 per kWh
+            const equivalentTrees = Math.round(co2OffsetKg / 21); // Average tree absorbs ~21kg CO2/year
+
+            return {
+                address: config.address,
+                lat: config.lat,
+                lng: config.lng,
+                buildingArea: totalRoofArea,
+                maxPanelCount: maxPanelCount,
+                yearlyEnergyKwh: yearlyEnergyDcKwh,
+                installationCost: installationCost,
+                annualSavings: annualSavings,
+                paybackYears: paybackYears,
+                co2OffsetKg: co2OffsetKg,
+                equivalentTrees: equivalentTrees,
+                imageryUrls: imageryData ? [
+                    { name: 'RGB Imagery', imageUrl: imageryData.rgbUrl },
+                    { name: 'Annual Solar Flux', imageUrl: imageryData.annualFluxUrl },
+                    { name: 'Roof Mask', imageUrl: imageryData.maskUrl }
+                ].filter(layer => layer.imageUrl) : [],
+                rawBuildingInsights: buildingInsights,
+                rawImageryData: imageryData
+            };
         }
 
-        function downloadTSV(tsv, filename) {
-            const blob = new Blob([tsv], { type: 'text/tab-separated-values' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            window.URL.revokeObjectURL(url);
+        function displayResults(results) {
+            currentResults = results;
+
+            // Location info
+            document.getElementById('result-address').textContent = results.address;
+            document.getElementById('result-coords').textContent = `${results.lat.toFixed(6)}, ${results.lng.toFixed(6)}`;
+            document.getElementById('result-area').textContent = `${results.buildingArea.toFixed(1)} m²`;
+
+            // Solar potential
+            document.getElementById('result-flux').textContent = 'Calculated from roof analysis';
+            document.getElementById('result-panels').textContent = `${results.maxPanelCount} panels`;
+            document.getElementById('result-energy').textContent = `${results.yearlyEnergyKwh.toFixed(0)} kWh/year`;
+
+            // Financial
+            document.getElementById('result-cost').textContent = `$${results.installationCost.toLocaleString()}`;
+            document.getElementById('result-savings').textContent = `$${results.annualSavings.toFixed(0)}/year`;
+            document.getElementById('result-payback').textContent = `${results.paybackYears.toFixed(1)} years`;
+
+            // Environmental
+            document.getElementById('result-co2').textContent = `${results.co2OffsetKg.toFixed(0)} kg/year`;
+            document.getElementById('result-trees').textContent = `${results.equivalentTrees} trees`;
+
+            // Display imagery
+            displayImagery(results.imageryUrls);
+
+            document.getElementById('results').style.display = 'block';
+        }
+
+        function displayImagery(imageryUrls) {
+            const container = document.getElementById('imagery-container');
+
+            if (!imageryUrls || imageryUrls.length === 0) {
+                container.innerHTML = '<p>High-resolution imagery not available for this location</p>';
+                return;
+            }
+
+            container.innerHTML = '<h4>Roof Imagery & Analysis</h4>';
+
+            // Display each layer with labels
+            imageryUrls.forEach((layer, index) => {
+                if (layer.imageUrl) {
+                    const layerDiv = document.createElement('div');
+                    layerDiv.style.marginBottom = '20px';
+
+                    const label = document.createElement('h5');
+                    label.textContent = layer.name || `Layer ${index + 1}`;
+                    label.style.marginBottom = '10px';
+                    layerDiv.appendChild(label);
+
+                    const img = document.createElement('img');
+                    img.src = `${layer.imageUrl}&key=${GOOGLE_API_KEY}`;
+                    img.alt = layer.name || `Roof imagery layer ${index + 1}`;
+                    img.style.maxWidth = '100%';
+                    img.style.height = 'auto';
+                    img.style.border = '1px solid #ddd';
+                    img.style.borderRadius = '4px';
+                    img.onload = () => {
+                        console.log(`Loaded ${layer.name || 'layer'}`);
+                    };
+                    img.onerror = () => {
+                        console.warn('Failed to load imagery layer:', layer);
+                        img.style.display = 'none';
+                        const errorMsg = document.createElement('p');
+                        errorMsg.textContent = `Failed to load ${layer.name || 'imagery'}`;
+                        errorMsg.style.color = '#666';
+                        layerDiv.appendChild(errorMsg);
+                    };
+                    layerDiv.appendChild(img);
+                    container.appendChild(layerDiv);
+                }
+            });
         }
 
         function addStatusMessage(message, type) {
@@ -465,17 +570,29 @@
             statusDiv.scrollTop = statusDiv.scrollHeight;
         }
 
-        function resetApp() {
-            document.getElementById('results-section').classList.add('hidden');
-            document.getElementById('upload-section').classList.remove('hidden');
+        function clearStatusMessages() {
             document.getElementById('status-messages').innerHTML = '';
-            fileInput.value = '';
-            processBtn.disabled = true;
-            currentFile = null;
-            csvData = [];
-            successResults = [];
-            failedResults = [];
+        }
+
+        function resetApp() {
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('address-input').value = '';
+            clearStatusMessages();
+            currentResults = null;
         }
     </script>
+
+    <footer style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-top: 1px solid #dee2e6;">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <h5 style="color: #666; font-size: 14px; margin-bottom: 10px;">Changelog</h5>
+            <div style="font-size: 12px; color: #888; line-height: 1.4;">
+                <p><strong>v2.1</strong> (Latest) - Fixed imagery display for BASE quality data, Added proper expanded coverage support</p>
+                <p><strong>v2.0</strong> - Fixed expanded coverage API calls to use GET requests instead of POST</p>
+                <p><strong>v1.1</strong> - Added Malaysian address support with expanded coverage</p>
+                <p><strong>v1.0</strong> - Initial release with standard coverage support</p>
+            </div>
+            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: db5de32)</p>
+        </div>
+    </footer>
 </body>
 </html>
