@@ -473,7 +473,7 @@
 
             // Extract data from Solar API response
             const roofSegmentSummaries = buildingInsights.solarPotential?.roofSegmentStats || [];
-            const solarPanels = buildingInsights.solarPotential?.solarPanels || [];
+            const solarPanelConfigs = buildingInsights.solarPotential?.solarPanelConfigs || [];
             const financialAnalyses = buildingInsights.solarPotential?.financialAnalyses || [];
 
             // Calculate totals
@@ -487,18 +487,18 @@
                 }
             });
 
-            // Find the best configuration from solar panels
-            if (solarPanels.length > 0) {
-                const bestPanel = solarPanels.reduce((best, panel) => {
-                    return (panel.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? panel : best;
+            // Find the best configuration from solar panel configs
+            if (solarPanelConfigs.length > 0) {
+                const bestConfig = solarPanelConfigs.reduce((best, config) => {
+                    return (config.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? config : best;
                 });
 
                 // Extract API values directly - they already account for roof layout
-                const apiYearlyEnergyDcKwh = bestPanel.yearlyEnergyDcKwh || 0;
-                const apiPanelCount = bestPanel.panelsCount || 0;
+                const apiYearlyEnergyDcKwh = bestConfig.yearlyEnergyDcKwh || 0;
+                const apiPanelCount = bestConfig.panelsCount || 0;
 
-                // Get panel capacity from API response or buildingInsights
-                const apiPanelWatts = buildingInsights.panelCapacityWatts || 400;
+                // Get panel capacity from API response
+                const apiPanelWatts = buildingInsights.solarPotential.panelCapacityWatts || 400;
 
                 // User's custom panel power rating
                 const userPanelWatts = config.panelPower;
@@ -510,10 +510,12 @@
 
                 // For panel count, if user panels are different size, calculate how many fit
                 const userPanelArea = config.panelWidth * config.panelHeight;
-                const apiPanelArea = (buildingInsights.panelHeightMeters || 1.879) * (buildingInsights.panelWidthMeters || 1.045);
+                const apiPanelArea = (buildingInsights.solarPotential.panelHeightMeters || 1.879) * (buildingInsights.solarPotential.panelWidthMeters || 1.045);
                 maxPanelCount = Math.floor(apiPanelCount * (apiPanelArea / userPanelArea));
 
-                console.log('Solar calculation (per Google docs):', {
+                console.log('Solar calculation (FIXED - per Google docs):', {
+                    availableConfigs: solarPanelConfigs.length,
+                    bestConfig: bestConfig,
                     apiEnergy: apiYearlyEnergyDcKwh,
                     apiPanelWatts: apiPanelWatts,
                     userPanelWatts: userPanelWatts,
@@ -522,6 +524,8 @@
                     apiPanelCount: apiPanelCount,
                     adjustedPanelCount: maxPanelCount
                 });
+            } else {
+                console.error('No solarPanelConfigs found in API response!');
             }
 
             // Apply Google's DC-to-AC conversion and lifetime calculations
