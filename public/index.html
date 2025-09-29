@@ -741,8 +741,17 @@
                 container.removeChild(container.lastChild);
             }
 
-            // Create composite image combining all layers
+            // Debug logging
+            console.log('Available layers:', {
+                rgb: !!layers.rgb,
+                flux: !!layers.flux,
+                mask: !!layers.mask
+            });
+
+            // Create composite image - prioritize showing single composite
             if (layers.rgb && layers.flux) {
+                console.log('Creating composite with RGB + flux');
+
                 // Use RGB as base layer
                 const compositeCanvas = renderRGB({
                     width: layers.rgb.width,
@@ -757,7 +766,7 @@
                         height: layers.flux.height,
                         rasters: [layers.flux.data]
                     },
-                    colors: ['0000ff', '00ffff', 'ffff00', 'ff0000'], // Blue to red heat map
+                    colors: ['0000ff', '00ffff', 'ffff00', 'ff0000'],
                     min: layers.flux.stats.min,
                     max: layers.flux.stats.max,
                     index: 0
@@ -765,15 +774,39 @@
 
                 // Overlay solar flux on RGB with transparency
                 const ctx = compositeCanvas.getContext('2d');
-                ctx.globalAlpha = 0.6; // 60% opacity for solar overlay
+                ctx.globalAlpha = 0.6;
                 ctx.drawImage(fluxCanvas, 0, 0);
-                ctx.globalAlpha = 1.0; // Reset opacity
+                ctx.globalAlpha = 1.0;
 
                 const compositeDiv = document.createElement('div');
-                compositeDiv.innerHTML = `<h5>Solar Analysis Composite (RGB + Solar Flux)</h5>`;
+                compositeDiv.innerHTML = `<h5>🌞 Composite Solar Analysis (RGB + Solar Flux)</h5>`;
                 compositeDiv.appendChild(compositeCanvas);
                 container.appendChild(compositeDiv);
+
+                // Show just this one - return early to skip individual layers
+                targetCanvas.style.display = 'none';
+                return;
+
+            } else if (layers.rgb) {
+                console.log('Creating RGB-only composite');
+
+                const rgbCanvas = renderRGB({
+                    width: layers.rgb.width,
+                    height: layers.rgb.height,
+                    rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
+                });
+
+                const compositeDiv = document.createElement('div');
+                compositeDiv.innerHTML = `<h5>🌞 RGB Aerial Imagery</h5>`;
+                compositeDiv.appendChild(rgbCanvas);
+                container.appendChild(compositeDiv);
+
+                targetCanvas.style.display = 'none';
+                return;
+
             } else {
+                console.log('Falling back to individual layers');
+                // Fallback to individual layers if not all are available
                 // Fallback to individual layers if not all are available
                 if (layers.rgb) {
                     const rgbCanvas = renderRGB({
