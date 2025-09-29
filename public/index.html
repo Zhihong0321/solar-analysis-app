@@ -805,40 +805,12 @@
                 return;
 
             } else {
-                console.log('Falling back to individual layers');
-                // Fallback to individual layers if not all are available
-                // Fallback to individual layers if not all are available
-                if (layers.rgb) {
-                    const rgbCanvas = renderRGB({
-                        width: layers.rgb.width,
-                        height: layers.rgb.height,
-                        rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
-                    });
-
-                    const rgbDiv = document.createElement('div');
-                    rgbDiv.innerHTML = '<h5>RGB Aerial Imagery</h5>';
-                    rgbDiv.appendChild(rgbCanvas);
-                    container.appendChild(rgbDiv);
-                }
-
-                if (layers.flux) {
-                    const fluxCanvas = renderPalette({
-                        data: {
-                            width: layers.flux.width,
-                            height: layers.flux.height,
-                            rasters: [layers.flux.data]
-                        },
-                        colors: ['0000ff', '00ffff', 'ffff00', 'ff0000'],
-                        min: layers.flux.stats.min,
-                        max: layers.flux.stats.max,
-                        index: 0
-                    });
-
-                    const fluxDiv = document.createElement('div');
-                    fluxDiv.innerHTML = `<h5>Solar Flux (${layers.flux.stats.min.toFixed(0)} - ${layers.flux.stats.max.toFixed(0)} kWh/m²/year)</h5>`;
-                    fluxDiv.appendChild(fluxCanvas);
-                    container.appendChild(fluxDiv);
-                }
+                console.log('No composite possible - no sufficient layers');
+                const errorDiv = document.createElement('div');
+                errorDiv.innerHTML = '<h5>⚠️ Insufficient data for visualization</h5><p>Need RGB and/or solar flux data</p>';
+                container.appendChild(errorDiv);
+                targetCanvas.style.display = 'none';
+                return;
             }
 
             // Hide target canvas since we're using custom rendering
