@@ -554,7 +554,7 @@
                     layerDiv.appendChild(label);
 
                     const img = document.createElement('img');
-                    img.src = `${layer.imageUrl}&key=${GOOGLE_API_KEY}`;
+                    img.src = `/api/proxy-image?url=${encodeURIComponent(layer.imageUrl)}`;
                     img.alt = layer.name || `Roof imagery layer ${index + 1}`;
                     img.style.maxWidth = '100%';
                     img.style.height = 'auto';

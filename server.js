@@ -214,6 +214,39 @@ app.post('/api/solar/imagery', async (req, res) => {
     }
 });
 
+// Proxy imagery endpoint to handle CORS
+app.get('/api/proxy-image', async (req, res) => {
+    try {
+        const { url } = req.query;
+
+        if (!url) {
+            return res.status(400).json({ error: 'URL parameter required' });
+        }
+
+        // Add API key to the URL
+        const imageUrl = `${url}&key=${GOOGLE_API_KEY}`;
+        const response = await fetch(imageUrl);
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: 'Failed to fetch image' });
+        }
+
+        // Set appropriate headers
+        res.set({
+            'Content-Type': response.headers.get('content-type') || 'image/tiff',
+            'Cache-Control': 'public, max-age=3600'
+        });
+
+        // Pipe the response
+        const buffer = await response.arrayBuffer();
+        res.send(Buffer.from(buffer));
+
+    } catch (error) {
+        console.error('Image proxy error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({
