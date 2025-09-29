@@ -447,6 +447,30 @@
         function calculateSolarMetrics(buildingInsights, imageryData, config) {
             const panelArea = config.panelWidth * config.panelHeight; // m²
 
+            // Validate buildingInsights data
+            if (!buildingInsights || !buildingInsights.solarPotential) {
+                console.error('Solar potential data not available for this location');
+                return {
+                    address: config.address,
+                    lat: config.lat,
+                    lng: config.lng,
+                    buildingArea: 0,
+                    maxPanelCount: 0,
+                    yearlyEnergyKwh: 0,
+                    yearlyEnergyDcKwh: 0,
+                    lifetimeProductionAcKwh: 0,
+                    installationCost: 0,
+                    annualSavings: 0,
+                    paybackYears: 0,
+                    co2OffsetKg: 0,
+                    equivalentTrees: 0,
+                    error: 'Solar potential data not available for this location',
+                    imageryUrls: imageryData ? [
+                        { name: 'RGB Imagery', imageUrl: imageryData.rgbUrl }
+                    ].filter(layer => layer.imageUrl) : []
+                };
+            }
+
             // Extract data from Solar API response
             const roofSegmentSummaries = buildingInsights.solarPotential?.roofSegmentStats || [];
             const solarPanels = buildingInsights.solarPotential?.solarPanels || [];
@@ -577,6 +601,35 @@
         function displayResults(results) {
             currentResults = results;
 
+            // Check if there's an error in the results
+            if (results.error) {
+                // Show error message
+                document.getElementById('result-address').textContent = results.address;
+                document.getElementById('result-coords').textContent = `${results.lat.toFixed(6)}, ${results.lng.toFixed(6)}`;
+                document.getElementById('result-area').textContent = 'N/A';
+
+                // Show error for solar potential
+                document.getElementById('result-flux').textContent = results.error;
+                document.getElementById('result-panels').textContent = 'N/A';
+                document.getElementById('result-energy').textContent = 'N/A';
+
+                // Show error for financial
+                document.getElementById('result-cost').textContent = 'N/A';
+                document.getElementById('result-savings').textContent = 'N/A';
+                document.getElementById('result-payback').textContent = 'N/A';
+
+                // Show error for environmental
+                document.getElementById('result-co2').textContent = 'N/A';
+                document.getElementById('result-trees').textContent = 'N/A';
+
+                // Still try to display imagery if available
+                displayImagery(results.imageryUrls);
+
+                document.getElementById('results').style.display = 'block';
+                return;
+            }
+
+            // Normal display for successful results
             // Location info
             document.getElementById('result-address').textContent = results.address;
             document.getElementById('result-coords').textContent = `${results.lat.toFixed(6)}, ${results.lng.toFixed(6)}`;
