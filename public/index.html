@@ -351,8 +351,12 @@
 
                     if (quality === 'BASE') {
                         // For BASE quality, route through server to avoid CORS
-                        const url = `/api/building-insights?lat=${lat}&lng=${lng}&quality=${quality}`;
-                        response = await fetch(url);
+                        const url = `/api/solar/building-insights`;
+                        response = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lat, lng })
+                        });
                     } else {
                         // For HIGH and MEDIUM quality, use GET request
                         const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
@@ -392,8 +396,12 @@
 
                     if (quality === 'BASE') {
                         // For BASE quality, route through server to avoid CORS
-                        const url = `/api/imagery-data?lat=${lat}&lng=${lng}&quality=${quality}`;
-                        response = await fetch(url);
+                        const url = `/api/solar/imagery`;
+                        response = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lat, lng })
+                        });
                     } else {
                         // For HIGH and MEDIUM quality, use GET request
                         const url = `https://solar.googleapis.com/v1/dataLayers:get?location.latitude=${lat}&location.longitude=${lng}&radiusMeters=100&requiredQuality=${quality}&key=${GOOGLE_API_KEY}`;
