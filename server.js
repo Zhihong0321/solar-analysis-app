@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fetch = require('node-fetch');
 const path = require('path');
 const sharp = require('sharp');
+const GeoTIFF = require('geotiff');
 require('dotenv').config();
 
 const app = express();
@@ -248,7 +249,86 @@ app.get('/api/proxy-image', async (req, res) => {
     }
 });
 
-// Convert GeoTIFF to PNG endpoint
+// Process GeoTIFF data endpoint
+app.get('/api/process-geotiff', async (req, res) => {
+    try {
+        const { url, layer } = req.query;
+
+        if (!url) {
+            return res.status(400).json({ error: 'URL parameter required' });
+        }
+
+        console.log('Processing GeoTIFF data for URL:', url, 'Layer:', layer);
+
+        // Add API key to the URL
+        const imageUrl = `${url}&key=${GOOGLE_API_KEY}`;
+        const response = await fetch(imageUrl);
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: 'Failed to fetch GeoTIFF' });
+        }
+
+        // Get the GeoTIFF buffer
+        const buffer = await response.arrayBuffer();
+        console.log('GeoTIFF size:', buffer.byteLength, 'bytes');
+
+        // Parse GeoTIFF
+        const tiff = await GeoTIFF.fromArrayBuffer(buffer);
+        const image = await tiff.getImage();
+
+        console.log('Image dimensions:', await image.getWidth(), 'x', await image.getHeight());
+        console.log('Samples per pixel:', await image.getSamplesPerPixel());
+
+        // For RGB layer, return directly
+        if (layer === 'rgb') {
+            const rgbData = await image.readRasters();
+            const width = await image.getWidth();
+            const height = await image.getHeight();
+
+            return res.json({
+                success: true,
+                type: 'rgb',
+                width: width,
+                height: height,
+                data: {
+                    red: Array.from(rgbData[0]),
+                    green: Array.from(rgbData[1]),
+                    blue: Array.from(rgbData[2])
+                }
+            });
+        }
+
+        // For other layers (flux, mask), process as single band
+        const rasterData = await image.readRasters();
+        const width = await image.getWidth();
+        const height = await image.getHeight();
+        const values = Array.from(rasterData[0]);
+
+        // Calculate statistics for proper visualization
+        const validValues = values.filter(v => v !== -9999 && !isNaN(v));
+        const min = Math.min(...validValues);
+        const max = Math.max(...validValues);
+        const mean = validValues.reduce((a, b) => a + b, 0) / validValues.length;
+
+        console.log(`Layer stats - Min: ${min}, Max: ${max}, Mean: ${mean.toFixed(2)}`);
+
+        res.json({
+            success: true,
+            type: 'single-band',
+            layer: layer,
+            width: width,
+            height: height,
+            stats: { min, max, mean },
+            data: values
+        });
+
+    } catch (error) {
+        console.error('GeoTIFF processing error:', error);
+        res.status(500).json({ error: 'Failed to process GeoTIFF: ' + error.message });
+    }
+});
+
+// Convert GeoTIFF to PNG endpoint (fallback for simple display)
 app.get('/api/convert-image', async (req, res) => {
     try {
         const { url } = req.query;
