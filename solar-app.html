@@ -493,7 +493,11 @@
                 paybackYears: paybackYears,
                 co2OffsetKg: co2OffsetKg,
                 equivalentTrees: equivalentTrees,
-                imageryUrls: imageryData?.imageryLayers || [],
+                imageryUrls: imageryData ? [
+                    { name: 'RGB Imagery', imageUrl: imageryData.rgbUrl },
+                    { name: 'Annual Solar Flux', imageUrl: imageryData.annualFluxUrl },
+                    { name: 'Roof Mask', imageUrl: imageryData.maskUrl }
+                ].filter(layer => layer.imageUrl) : [],
                 rawBuildingInsights: buildingInsights,
                 rawImageryData: imageryData
             };
@@ -535,23 +539,39 @@
                 return;
             }
 
-            container.innerHTML = '<p>Loading roof imagery...</p>';
+            container.innerHTML = '<h4>Roof Imagery & Analysis</h4>';
 
-            // Try to display RGB imagery if available
+            // Display each layer with labels
             imageryUrls.forEach((layer, index) => {
                 if (layer.imageUrl) {
+                    const layerDiv = document.createElement('div');
+                    layerDiv.style.marginBottom = '20px';
+
+                    const label = document.createElement('h5');
+                    label.textContent = layer.name || `Layer ${index + 1}`;
+                    label.style.marginBottom = '10px';
+                    layerDiv.appendChild(label);
+
                     const img = document.createElement('img');
                     img.src = `${layer.imageUrl}&key=${GOOGLE_API_KEY}`;
-                    img.alt = `Roof imagery layer ${index + 1}`;
+                    img.alt = layer.name || `Roof imagery layer ${index + 1}`;
+                    img.style.maxWidth = '100%';
+                    img.style.height = 'auto';
+                    img.style.border = '1px solid #ddd';
+                    img.style.borderRadius = '4px';
                     img.onload = () => {
-                        if (container.innerHTML.includes('Loading')) {
-                            container.innerHTML = '';
-                        }
-                        container.appendChild(img);
+                        console.log(`Loaded ${layer.name || 'layer'}`);
                     };
                     img.onerror = () => {
                         console.warn('Failed to load imagery layer:', layer);
+                        img.style.display = 'none';
+                        const errorMsg = document.createElement('p');
+                        errorMsg.textContent = `Failed to load ${layer.name || 'imagery'}`;
+                        errorMsg.style.color = '#666';
+                        layerDiv.appendChild(errorMsg);
                     };
+                    layerDiv.appendChild(img);
+                    container.appendChild(layerDiv);
                 }
             });
         }
