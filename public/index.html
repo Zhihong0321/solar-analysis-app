@@ -469,34 +469,51 @@
                     return (panel.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? panel : best;
                 });
 
-                // Google's default panel specs from API
-                const googlePanelWatts = 400;
-                const googlePanelArea = 1.879 * 1.045; // m²
+                // Extract API values directly - they already account for roof layout
+                const apiYearlyEnergyDcKwh = bestPanel.yearlyEnergyDcKwh || 0;
+                const apiPanelCount = bestPanel.panelsCount || 0;
 
-                // User's custom panel specs
+                // Get panel capacity from API response or buildingInsights
+                const apiPanelWatts = buildingInsights.panelCapacityWatts || 400;
+
+                // User's custom panel power rating
                 const userPanelWatts = config.panelPower;
-                const userPanelArea = config.panelWidth * config.panelHeight; // m²
 
-                // Calculate scaling factors
-                const powerScaleFactor = userPanelWatts / googlePanelWatts;
-                const areaScaleFactor = userPanelArea / googlePanelArea;
+                // Apply Google's formula: adjust energy production for custom panel power rating
+                // "multiply the value returned by the API in the yearlyEnergyDcKwh field by the ratio of your power rating"
+                const powerRatio = userPanelWatts / apiPanelWatts;
+                yearlyEnergyDcKwh = apiYearlyEnergyDcKwh * powerRatio;
 
-                // Adjust panel count based on area difference
-                const areaBasedPanelCount = Math.floor((bestPanel.panelsCount || 0) * googlePanelArea / userPanelArea);
+                // For panel count, if user panels are different size, calculate how many fit
+                const userPanelArea = config.panelWidth * config.panelHeight;
+                const apiPanelArea = (buildingInsights.panelHeightMeters || 1.879) * (buildingInsights.panelWidthMeters || 1.045);
+                maxPanelCount = Math.floor(apiPanelCount * (apiPanelArea / userPanelArea));
 
-                maxPanelCount = areaBasedPanelCount;
-                // Scale energy generation based on both panel count and power differences
-                yearlyEnergyDcKwh = (bestPanel.yearlyEnergyDcKwh || 0) * powerScaleFactor * (areaBasedPanelCount / (bestPanel.panelsCount || 1));
-
-                console.log('Panel calculation:', {
-                    googleSpecs: { watts: googlePanelWatts, area: googlePanelArea },
-                    userSpecs: { watts: userPanelWatts, area: userPanelArea },
-                    originalPanels: bestPanel.panelsCount,
-                    adjustedPanels: maxPanelCount,
-                    originalEnergy: bestPanel.yearlyEnergyDcKwh,
-                    adjustedEnergy: yearlyEnergyDcKwh
+                console.log('Solar calculation (per Google docs):', {
+                    apiEnergy: apiYearlyEnergyDcKwh,
+                    apiPanelWatts: apiPanelWatts,
+                    userPanelWatts: userPanelWatts,
+                    powerRatio: powerRatio,
+                    adjustedEnergy: yearlyEnergyDcKwh,
+                    apiPanelCount: apiPanelCount,
+                    adjustedPanelCount: maxPanelCount
                 });
             }
+
+            // Apply Google's DC-to-AC conversion and lifetime calculations
+            const dcToAcDerate = 0.85; // 85% efficiency (Google's default)
+            const initialAcKwhPerYear = yearlyEnergyDcKwh * dcToAcDerate;
+
+            // Calculate lifetime production (Google's formula for non-US)
+            const efficiencyDepreciationFactor = 0.995; // 0.5% annual decrease
+            const installationLifeSpan = 20; // years
+
+            const lifetimeProductionAcKwh = (
+                dcToAcDerate *
+                yearlyEnergyDcKwh *
+                (1 - Math.pow(efficiencyDepreciationFactor, installationLifeSpan)) /
+                (1 - efficiencyDepreciationFactor)
+            );
 
             // Calculate financial metrics
             let installationCost = 0;
@@ -506,7 +523,14 @@
             if (financialAnalyses.length > 0) {
                 const bestFinancial = financialAnalyses[0];
                 installationCost = bestFinancial.upfrontCost?.value || maxPanelCount * 1000; // Fallback estimate
-                annualSavings = bestFinancial.savings?.savingsYear1?.value || yearlyEnergyDcKwh * 0.12; // Fallback rate
+                annualSavings = bestFinancial.savings?.savingsYear1?.value || initialAcKwhPerYear * 0.12; // Use AC energy
+                paybackYears = installationCost / (annualSavings || 1);
+            } else {
+                // Fallback calculation for non-US regions
+                const estimatedCostPerPanel = 1000; // USD estimate
+                installationCost = maxPanelCount * estimatedCostPerPanel;
+                const electricityRate = 0.12; // USD per kWh estimate
+                annualSavings = initialAcKwhPerYear * electricityRate;
                 paybackYears = installationCost / (annualSavings || 1);
             }
 
@@ -514,13 +538,24 @@
             const co2OffsetKg = yearlyEnergyDcKwh * 0.4; // kg CO2 per kWh
             const equivalentTrees = Math.round(co2OffsetKg / 21); // Average tree absorbs ~21kg CO2/year
 
+            console.log('Final calculations (Google non-US method):', {
+                yearlyEnergyDcKwh: yearlyEnergyDcKwh,
+                initialAcKwhPerYear: initialAcKwhPerYear,
+                lifetimeProductionAcKwh: lifetimeProductionAcKwh,
+                installationCost: installationCost,
+                annualSavings: annualSavings,
+                paybackYears: paybackYears
+            });
+
             return {
                 address: config.address,
                 lat: config.lat,
                 lng: config.lng,
                 buildingArea: totalRoofArea,
                 maxPanelCount: maxPanelCount,
-                yearlyEnergyKwh: yearlyEnergyDcKwh,
+                yearlyEnergyKwh: initialAcKwhPerYear, // Use AC energy for display
+                yearlyEnergyDcKwh: yearlyEnergyDcKwh, // Keep DC for reference
+                lifetimeProductionAcKwh: lifetimeProductionAcKwh,
                 installationCost: installationCost,
                 annualSavings: annualSavings,
                 paybackYears: paybackYears,
