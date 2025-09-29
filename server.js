@@ -404,6 +404,41 @@ app.get('/api/convert-image', async (req, res) => {
     }
 });
 
+// Debug endpoint to test specific coordinates
+app.get('/api/debug-solar/:lat/:lng', async (req, res) => {
+    try {
+        const { lat, lng } = req.params;
+
+        console.log(`Debug: Testing Solar API for coordinates ${lat}, ${lng}`);
+
+        const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=BASE&experiments=EXPANDED_COVERAGE&key=${GOOGLE_API_KEY}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        console.log('API Response Status:', response.status);
+        console.log('API Response Data:', JSON.stringify(data, null, 2).substring(0, 500) + '...');
+
+        res.json({
+            status: response.status,
+            hasApiKey: !!GOOGLE_API_KEY,
+            coordinates: { lat, lng },
+            response: data,
+            hasSolarPotential: !!(data.solarPotential),
+            solarPotentialKeys: data.solarPotential ? Object.keys(data.solarPotential) : [],
+            panelSpecs: data.panelCapacityWatts ? {
+                watts: data.panelCapacityWatts,
+                height: data.panelHeightMeters,
+                width: data.panelWidthMeters
+            } : null
+        });
+
+    } catch (error) {
+        console.error('Debug API error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({
