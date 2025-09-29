@@ -412,6 +412,7 @@
 
                     if (response.ok) {
                         addStatusMessage(`Retrieved imagery data (${quality} quality)`, 'success');
+                        console.log('Imagery data received:', data);
                         return data;
                     } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
                         continue;
@@ -490,7 +491,10 @@
                     { name: 'RGB Imagery', imageUrl: imageryData.rgbUrl },
                     { name: 'Annual Solar Flux', imageUrl: imageryData.annualFluxUrl },
                     { name: 'Roof Mask', imageUrl: imageryData.maskUrl }
-                ].filter(layer => layer.imageUrl) : [],
+                ].filter(layer => {
+                    console.log('Processing imagery layer:', layer.name, layer.imageUrl);
+                    return layer.imageUrl;
+                }) : [],
                 rawBuildingInsights: buildingInsights,
                 rawImageryData: imageryData
             };
