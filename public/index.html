@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar Analysis Tool v3.3</title>
+    <title>Solar Analysis Tool</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCrLcxkBYE1_Duo2hGsyzo3ir-nJm7OnkE&libraries=places"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -40,12 +41,11 @@
             font-weight: bold;
             color: #555;
         }
-        input[type="text"], input[type="number"], select {
+        input[type="text"], input[type="number"] {
             padding: 12px;
             border: 1px solid #ddd;
             border-radius: 5px;
             font-size: 16px;
-            background-color: white;
         }
         button {
             background-color: #007bff;
@@ -129,6 +129,29 @@
             100% { transform: rotate(360deg); }
         }
         .hidden { display: none; }
+        #map {
+            width: 100%;
+            height: 400px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        #map.visible {
+            display: block;
+        }
+        .map-instructions {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+        }
+        .map-instructions.visible {
+            display: block;
+        }
         @media (max-width: 768px) {
             .input-section {
                 grid-template-columns: 1fr;
@@ -141,37 +164,37 @@
 </head>
 <body>
     <div class="container">
-        <h1>🌞 Solar Analysis Tool <span style="font-size: 14px; color: #666;">[v3.3]</span></h1>
+        <h1>🌞 Solar Analysis Tool</h1>
 
         <div class="input-section">
             <div class="input-group">
                 <label for="address-input">Address</label>
-                <input type="text" id="address-input" placeholder="Enter street address" value="jalan nada alam 4/2, taman nada alam, Negeri Sembilan" />
+                <input type="text" id="address-input" placeholder="Enter street address" />
             </div>
             <div class="input-group">
                 <label for="panel-power">Panel Power (W)</label>
-                <input type="number" id="panel-power" value="400" min="100" max="1000" />
+                <input type="number" id="panel-power" value="620" min="100" max="1000" />
             </div>
             <div class="input-group">
-                <label for="panel-width">Panel Width (mm)</label>
-                <input type="number" id="panel-width" value="1045" min="500" max="3000" step="1" />
+                <button id="search-btn" onclick="searchAddress()" style="width: 100%;">Search Address</button>
             </div>
         </div>
 
-        <div class="input-section">
+        <div id="map"></div>
+        <div id="map-instructions" class="map-instructions">
+            Click on the map to pinpoint the exact location for solar analysis
+        </div>
+
+        <div class="input-section" style="margin-top: 20px;">
+            <div class="input-group">
+                <label for="panel-width">Panel Width (mm)</label>
+                <input type="number" id="panel-width" value="1134" min="500" max="3000" step="1" />
+            </div>
             <div class="input-group">
                 <label for="panel-height">Panel Height (mm)</label>
-                <input type="number" id="panel-height" value="1879" min="500" max="3000" step="1" />
+                <input type="number" id="panel-height" value="2278" min="500" max="3000" step="1" />
             </div>
-            <div class="input-group">
-                <label for="quality-select">Data Quality</label>
-                <select id="quality-select">
-                    <option value="BASE" selected>BASE (Satellite)</option>
-                    <option value="MEDIUM">MEDIUM (0.25m/pixel)</option>
-                    <option value="HIGH">HIGH (0.1m/pixel)</option>
-                </select>
-            </div>
-            <button id="analyze-btn" onclick="analyzeSolar()">Analyze Solar Potential</button>
+            <button id="analyze-btn" onclick="analyzeSolar()" disabled>Analyze Solar Potential</button>
         </div>
 
         <div id="status-messages"></div>
@@ -261,60 +284,147 @@
         const GOOGLE_API_KEY = 'AIzaSyCrLcxkBYE1_Duo2hGsyzo3ir-nJm7OnkE';
 
         let currentResults = null;
+        let map = null;
+        let marker = null;
+        let selectedLocation = null;
+        let geocoder = null;
 
-        async function analyzeSolar() {
+        function initMap() {
+            // Initialize map centered on a default location
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 3.139, lng: 101.6869 }, // Kuala Lumpur default
+                zoom: 15,
+                mapTypeId: 'satellite'
+            });
+
+            geocoder = new google.maps.Geocoder();
+
+            // Add click listener to map for pinpointing
+            map.addListener('click', function(event) {
+                placeMarker(event.latLng);
+            });
+        }
+
+        function placeMarker(location) {
+            // Remove existing marker if any
+            if (marker) {
+                marker.setMap(null);
+            }
+
+            // Create new marker
+            marker = new google.maps.Marker({
+                position: location,
+                map: map,
+                draggable: true,
+                title: 'Selected Location'
+            });
+
+            // Update selected location
+            selectedLocation = {
+                lat: location.lat(),
+                lng: location.lng()
+            };
+
+            // Enable analyze button
+            document.getElementById('analyze-btn').disabled = false;
+
+            // Add drag listener to marker
+            marker.addListener('dragend', function(event) {
+                selectedLocation = {
+                    lat: event.latLng.lat(),
+                    lng: event.latLng.lng()
+                };
+            });
+
+            addStatusMessage(`Location selected: ${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}`, 'success');
+        }
+
+        async function searchAddress() {
             const address = document.getElementById('address-input').value.trim();
-            const panelPower = parseFloat(document.getElementById('panel-power').value) || 400;
-            const panelWidthMm = parseFloat(document.getElementById('panel-width').value) || 1045;
-            const panelHeightMm = parseFloat(document.getElementById('panel-height').value) || 1879;
-
-            // Convert millimeters to meters for calculations
-            const panelWidth = panelWidthMm / 1000;
-            const panelHeight = panelHeightMm / 1000;
 
             if (!address) {
                 addStatusMessage('Please enter an address', 'error');
                 return;
             }
 
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('results').style.display = 'none';
             clearStatusMessages();
+            addStatusMessage('Searching for address...', 'info');
 
             try {
-                // Step 1: Geocode the address
-                addStatusMessage('Geocoding address...', 'info');
                 const geocodeResult = await geocodeAddress(address);
 
                 if (!geocodeResult.success) {
                     throw new Error(geocodeResult.error);
                 }
 
-                addStatusMessage(`Found coordinates: ${geocodeResult.lat}, ${geocodeResult.lng}`, 'success');
+                // Show map
+                const mapElement = document.getElementById('map');
+                const instructionsElement = document.getElementById('map-instructions');
+                mapElement.classList.add('visible');
+                instructionsElement.classList.add('visible');
 
-                // Step 2: Get building insights
+                // Initialize map if not already initialized
+                if (!map) {
+                    initMap();
+                }
+
+                // Center map on geocoded location
+                const location = new google.maps.LatLng(geocodeResult.lat, geocodeResult.lng);
+                map.setCenter(location);
+                map.setZoom(20);
+
+                // Place marker at geocoded location
+                placeMarker(location);
+
+                addStatusMessage(`Found: ${geocodeResult.formattedAddress}`, 'success');
+                addStatusMessage('Click on the map to adjust the pinpoint location', 'info');
+
+            } catch (error) {
+                addStatusMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function analyzeSolar() {
+            if (!selectedLocation) {
+                addStatusMessage('Please search for an address and pinpoint a location on the map first', 'error');
+                return;
+            }
+
+            const panelPower = parseFloat(document.getElementById('panel-power').value) || 620;
+            const panelWidthMm = parseFloat(document.getElementById('panel-width').value) || 1134;
+            const panelHeightMm = parseFloat(document.getElementById('panel-height').value) || 2278;
+
+            // Convert millimeters to meters for calculations
+            const panelWidth = panelWidthMm / 1000;
+            const panelHeight = panelHeightMm / 1000;
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').style.display = 'none';
+            clearStatusMessages();
+
+            try {
+                // Use the pinpointed coordinates
+                const lat = selectedLocation.lat;
+                const lng = selectedLocation.lng;
+
+                addStatusMessage(`Using pinpointed coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`, 'info');
+
+                // Step 1: Get building insights
                 addStatusMessage('Analyzing building solar potential...', 'info');
-                const buildingInsights = await getBuildingInsights(geocodeResult.lat, geocodeResult.lng);
+                const buildingInsights = await getBuildingInsights(lat, lng);
 
-                // Step 3: Get imagery data
+                // Step 2: Get imagery data
                 addStatusMessage('Fetching roof imagery...', 'info');
-                const imageryData = await getImageryData(geocodeResult.lat, geocodeResult.lng);
+                const imageryData = await getImageryData(lat, lng);
 
-                // Step 4: Calculate results
-                console.log('About to calculate solar metrics with:', {
-                    hasBuildingInsights: !!buildingInsights,
-                    buildingInsightsType: typeof buildingInsights,
-                    buildingInsightsKeys: buildingInsights ? Object.keys(buildingInsights) : [],
-                    hasImageryData: !!imageryData
-                });
-
+                // Step 3: Calculate results
                 const results = calculateSolarMetrics(buildingInsights, imageryData, {
                     panelPower,
                     panelWidth,
                     panelHeight,
-                    address: geocodeResult.formattedAddress,
-                    lat: geocodeResult.lat,
-                    lng: geocodeResult.lng
+                    address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                    lat: lat,
+                    lng: lng
                 });
 
                 displayResults(results);
@@ -357,9 +467,8 @@
         }
 
         async function getBuildingInsights(lat, lng) {
-            // Use selected quality level, but for Malaysia always try BASE first
-            const selectedQuality = document.getElementById('quality-select').value;
-            const qualityLevels = selectedQuality === 'BASE' ? ['BASE'] : [selectedQuality, 'BASE'];
+            // Try HIGH, MEDIUM, then BASE (experimental) quality levels
+            const qualityLevels = ['HIGH', 'MEDIUM', 'BASE'];
 
             for (const quality of qualityLevels) {
                 try {
@@ -370,7 +479,9 @@
                         const url = `/api/solar/building-insights`;
                         response = await fetch(url, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
                             body: JSON.stringify({ lat, lng })
                         });
                     } else {
@@ -386,7 +497,8 @@
                                           quality === 'MEDIUM' ? '0.25m/pixel aerial' :
                                           '0.25m/pixel satellite (experimental)';
                         addStatusMessage(`Found solar data (${quality} quality - ${qualityInfo})`, 'success');
-                        return data;
+                        // If server response, extract data property; otherwise use data directly
+                        return data.data || data;
                     } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
                         addStatusMessage(`${quality} quality data not available, trying ${quality === 'HIGH' ? 'MEDIUM' : 'BASE (experimental)'}...`, 'info');
                         continue;
@@ -403,9 +515,8 @@
         }
 
         async function getImageryData(lat, lng) {
-            // Use selected quality level, but for Malaysia always try BASE first
-            const selectedQuality = document.getElementById('quality-select').value;
-            const qualityLevels = selectedQuality === 'BASE' ? ['BASE'] : [selectedQuality, 'BASE'];
+            // Try HIGH, MEDIUM, then BASE (experimental) quality levels
+            const qualityLevels = ['HIGH', 'MEDIUM', 'BASE'];
 
             for (const quality of qualityLevels) {
                 try {
@@ -416,7 +527,9 @@
                         const url = `/api/solar/imagery`;
                         response = await fetch(url, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
                             body: JSON.stringify({ lat, lng })
                         });
                     } else {
@@ -429,12 +542,8 @@
 
                     if (response.ok) {
                         addStatusMessage(`Retrieved imagery data (${quality} quality)`, 'success');
-                        console.log('Imagery data received:', data);
-                        // Handle server wrapper format for BASE quality
-                        if (quality === 'BASE' && data.success && data.data) {
-                            return data.data;
-                        }
-                        return data;
+                        // If server response, extract data property; otherwise use data directly
+                        return data.data || data;
                     } else if (data.error?.message?.includes('not found') && quality !== 'BASE') {
                         continue;
                     } else {
@@ -454,41 +563,9 @@
         function calculateSolarMetrics(buildingInsights, imageryData, config) {
             const panelArea = config.panelWidth * config.panelHeight; // m²
 
-            // Debug the buildingInsights structure
-            console.log('Building insights validation:', {
-                hasBuildingInsights: !!buildingInsights,
-                hasSolarPotential: !!buildingInsights?.solarPotential,
-                solarPotentialKeys: buildingInsights?.solarPotential ? Object.keys(buildingInsights.solarPotential) : [],
-                buildingInsightsKeys: buildingInsights ? Object.keys(buildingInsights) : []
-            });
-
-            // Only validate if absolutely no data
-            if (!buildingInsights || !buildingInsights.solarPotential || !buildingInsights.solarPotential.solarPanelConfigs) {
-                console.error('Solar potential data not available for this location');
-                return {
-                    address: config.address,
-                    lat: config.lat,
-                    lng: config.lng,
-                    buildingArea: 0,
-                    maxPanelCount: 0,
-                    yearlyEnergyKwh: 0,
-                    yearlyEnergyDcKwh: 0,
-                    lifetimeProductionAcKwh: 0,
-                    installationCost: 0,
-                    annualSavings: 0,
-                    paybackYears: 0,
-                    co2OffsetKg: 0,
-                    equivalentTrees: 0,
-                    error: 'Solar potential data not available for this location',
-                    imageryUrls: imageryData ? [
-                        { name: 'RGB Imagery', imageUrl: imageryData.rgbUrl }
-                    ].filter(layer => layer.imageUrl) : []
-                };
-            }
-
             // Extract data from Solar API response
             const roofSegmentSummaries = buildingInsights.solarPotential?.roofSegmentStats || [];
-            const solarPanelConfigs = buildingInsights.solarPotential?.solarPanelConfigs || [];
+            const solarPanels = buildingInsights.solarPotential?.solarPanels || [];
             const financialAnalyses = buildingInsights.solarPotential?.financialAnalyses || [];
 
             // Calculate totals
@@ -502,61 +579,15 @@
                 }
             });
 
-            // Find the best configuration from solar panel configs
-            if (solarPanelConfigs.length > 0) {
-                const bestConfig = solarPanelConfigs.reduce((best, config) => {
-                    return (config.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? config : best;
+            // Find the best configuration from solar panels
+            if (solarPanels.length > 0) {
+                const bestPanel = solarPanels.reduce((best, panel) => {
+                    return (panel.yearlyEnergyDcKwh || 0) > (best.yearlyEnergyDcKwh || 0) ? panel : best;
                 });
 
-                // Extract API values directly - they already account for roof layout
-                const apiYearlyEnergyDcKwh = bestConfig.yearlyEnergyDcKwh || 0;
-                const apiPanelCount = bestConfig.panelsCount || 0;
-
-                // Get panel capacity from API response
-                const apiPanelWatts = buildingInsights.solarPotential.panelCapacityWatts || 400;
-
-                // User's custom panel power rating
-                const userPanelWatts = config.panelPower;
-
-                // Apply Google's formula: adjust energy production for custom panel power rating
-                // "multiply the value returned by the API in the yearlyEnergyDcKwh field by the ratio of your power rating"
-                const powerRatio = userPanelWatts / apiPanelWatts;
-                yearlyEnergyDcKwh = apiYearlyEnergyDcKwh * powerRatio;
-
-                // For panel count, if user panels are different size, calculate how many fit
-                const userPanelArea = config.panelWidth * config.panelHeight;
-                const apiPanelArea = (buildingInsights.solarPotential.panelHeightMeters || 1.879) * (buildingInsights.solarPotential.panelWidthMeters || 1.045);
-                maxPanelCount = Math.floor(apiPanelCount * (apiPanelArea / userPanelArea));
-
-                console.log('Solar calculation (FIXED - per Google docs):', {
-                    availableConfigs: solarPanelConfigs.length,
-                    bestConfig: bestConfig,
-                    apiEnergy: apiYearlyEnergyDcKwh,
-                    apiPanelWatts: apiPanelWatts,
-                    userPanelWatts: userPanelWatts,
-                    powerRatio: powerRatio,
-                    adjustedEnergy: yearlyEnergyDcKwh,
-                    apiPanelCount: apiPanelCount,
-                    adjustedPanelCount: maxPanelCount
-                });
-            } else {
-                console.error('No solarPanelConfigs found in API response!');
+                maxPanelCount = bestPanel.panelsCount || 0;
+                yearlyEnergyDcKwh = bestPanel.yearlyEnergyDcKwh || 0;
             }
-
-            // Apply Google's DC-to-AC conversion and lifetime calculations
-            const dcToAcDerate = 0.85; // 85% efficiency (Google's default)
-            const initialAcKwhPerYear = yearlyEnergyDcKwh * dcToAcDerate;
-
-            // Calculate lifetime production (Google's formula for non-US)
-            const efficiencyDepreciationFactor = 0.995; // 0.5% annual decrease
-            const installationLifeSpan = 20; // years
-
-            const lifetimeProductionAcKwh = (
-                dcToAcDerate *
-                yearlyEnergyDcKwh *
-                (1 - Math.pow(efficiencyDepreciationFactor, installationLifeSpan)) /
-                (1 - efficiencyDepreciationFactor)
-            );
 
             // Calculate financial metrics
             let installationCost = 0;
@@ -566,14 +597,7 @@
             if (financialAnalyses.length > 0) {
                 const bestFinancial = financialAnalyses[0];
                 installationCost = bestFinancial.upfrontCost?.value || maxPanelCount * 1000; // Fallback estimate
-                annualSavings = bestFinancial.savings?.savingsYear1?.value || initialAcKwhPerYear * 0.12; // Use AC energy
-                paybackYears = installationCost / (annualSavings || 1);
-            } else {
-                // Fallback calculation for non-US regions
-                const estimatedCostPerPanel = 1000; // USD estimate
-                installationCost = maxPanelCount * estimatedCostPerPanel;
-                const electricityRate = 0.12; // USD per kWh estimate
-                annualSavings = initialAcKwhPerYear * electricityRate;
+                annualSavings = bestFinancial.savings?.savingsYear1?.value || yearlyEnergyDcKwh * 0.12; // Fallback rate
                 paybackYears = installationCost / (annualSavings || 1);
             }
 
@@ -581,37 +605,21 @@
             const co2OffsetKg = yearlyEnergyDcKwh * 0.4; // kg CO2 per kWh
             const equivalentTrees = Math.round(co2OffsetKg / 21); // Average tree absorbs ~21kg CO2/year
 
-            console.log('Final calculations (Google non-US method):', {
-                yearlyEnergyDcKwh: yearlyEnergyDcKwh,
-                initialAcKwhPerYear: initialAcKwhPerYear,
-                lifetimeProductionAcKwh: lifetimeProductionAcKwh,
-                installationCost: installationCost,
-                annualSavings: annualSavings,
-                paybackYears: paybackYears
-            });
-
             return {
                 address: config.address,
                 lat: config.lat,
                 lng: config.lng,
                 buildingArea: totalRoofArea,
                 maxPanelCount: maxPanelCount,
-                yearlyEnergyKwh: initialAcKwhPerYear, // Use AC energy for display
-                yearlyEnergyDcKwh: yearlyEnergyDcKwh, // Keep DC for reference
-                lifetimeProductionAcKwh: lifetimeProductionAcKwh,
+                yearlyEnergyKwh: yearlyEnergyDcKwh,
                 installationCost: installationCost,
                 annualSavings: annualSavings,
                 paybackYears: paybackYears,
                 co2OffsetKg: co2OffsetKg,
                 equivalentTrees: equivalentTrees,
-                imageryUrls: imageryData ? [
-                    { name: 'RGB Imagery', imageUrl: imageryData.rgbUrl },
-                    { name: 'Annual Solar Flux', imageUrl: imageryData.annualFluxUrl },
-                    { name: 'Roof Mask', imageUrl: imageryData.maskUrl }
-                ].filter(layer => {
-                    console.log('Processing imagery layer:', layer.name, layer.imageUrl);
-                    return layer.imageUrl;
-                }) : [],
+                imageryUrls: imageryData && imageryData.rgbUrl ? [
+                    { name: 'Roof Image', imageUrl: imageryData.rgbUrl }
+                ] : [],
                 rawBuildingInsights: buildingInsights,
                 rawImageryData: imageryData
             };
@@ -620,35 +628,6 @@
         function displayResults(results) {
             currentResults = results;
 
-            // Check if there's an error in the results
-            if (results.error) {
-                // Show error message
-                document.getElementById('result-address').textContent = results.address;
-                document.getElementById('result-coords').textContent = `${results.lat.toFixed(6)}, ${results.lng.toFixed(6)}`;
-                document.getElementById('result-area').textContent = 'N/A';
-
-                // Show error for solar potential
-                document.getElementById('result-flux').textContent = results.error;
-                document.getElementById('result-panels').textContent = 'N/A';
-                document.getElementById('result-energy').textContent = 'N/A';
-
-                // Show error for financial
-                document.getElementById('result-cost').textContent = 'N/A';
-                document.getElementById('result-savings').textContent = 'N/A';
-                document.getElementById('result-payback').textContent = 'N/A';
-
-                // Show error for environmental
-                document.getElementById('result-co2').textContent = 'N/A';
-                document.getElementById('result-trees').textContent = 'N/A';
-
-                // Still try to display imagery if available
-                displayImagery(results.imageryUrls);
-
-                document.getElementById('results').style.display = 'block';
-                return;
-            }
-
-            // Normal display for successful results
             // Location info
             document.getElementById('result-address').textContent = results.address;
             document.getElementById('result-coords').textContent = `${results.lat.toFixed(6)}, ${results.lng.toFixed(6)}`;
@@ -682,50 +661,112 @@
                 return;
             }
 
-            container.innerHTML = '<h4>Roof Imagery</h4>';
+            container.innerHTML = '';
 
-            // Find and display only RGB roof imagery
-            const rgbLayer = imageryUrls.find(layer =>
-                layer.name && layer.name.includes('RGB') && layer.imageUrl
-            );
+            // Display roof image with zoom and download
+            imageryUrls.forEach((layer, index) => {
+                if (layer.imageUrl) {
+                    const layerDiv = document.createElement('div');
+                    layerDiv.style.marginBottom = '20px';
 
-            if (rgbLayer) {
-                const imageDiv = document.createElement('div');
-                imageDiv.style.marginBottom = '20px';
+                    const header = document.createElement('div');
+                    header.style.display = 'flex';
+                    header.style.justifyContent = 'space-between';
+                    header.style.alignItems = 'center';
+                    header.style.marginBottom = '10px';
 
-                const title = document.createElement('h5');
-                title.textContent = 'Roof Image';
-                title.style.margin = '0 0 10px 0';
-                imageDiv.appendChild(title);
+                    const label = document.createElement('h4');
+                    label.textContent = layer.name || 'Roof Image';
+                    label.style.margin = '0';
+                    header.appendChild(label);
 
-                const img = document.createElement('img');
-                const imageUrl = `/api/convert-image?url=${encodeURIComponent(rgbLayer.imageUrl)}`;
-                console.log('Loading roof image:', imageUrl);
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.textContent = 'Download Image';
+                    downloadBtn.style.padding = '8px 16px';
+                    downloadBtn.style.fontSize = '14px';
+                    downloadBtn.onclick = () => downloadImage(layer.imageUrl, 'roof-image.png');
+                    header.appendChild(downloadBtn);
 
-                img.src = imageUrl;
-                img.alt = 'Roof imagery';
-                img.style.maxWidth = '100%';
-                img.style.height = 'auto';
-                img.style.border = '1px solid #ddd';
-                img.style.borderRadius = '4px';
+                    layerDiv.appendChild(header);
 
-                img.onload = () => {
-                    console.log('Roof image loaded successfully');
-                };
+                    const imgContainer = document.createElement('div');
+                    imgContainer.style.position = 'relative';
+                    imgContainer.style.overflow = 'auto';
+                    imgContainer.style.maxHeight = '600px';
+                    imgContainer.style.border = '2px solid #ddd';
+                    imgContainer.style.borderRadius = '8px';
+                    imgContainer.style.cursor = 'zoom-in';
 
-                img.onerror = () => {
-                    console.error('Failed to load roof image');
-                    img.style.display = 'none';
-                    const errorMsg = document.createElement('p');
-                    errorMsg.textContent = 'Failed to load roof image';
-                    errorMsg.style.color = '#dc3545';
-                    imageDiv.appendChild(errorMsg);
-                };
+                    const img = document.createElement('img');
+                    // Use server-side conversion for GeoTIFF images
+                    img.src = `/api/convert-image?url=${encodeURIComponent(layer.imageUrl)}`;
+                    img.alt = layer.name || 'Roof image';
+                    img.style.width = '100%';
+                    img.style.height = 'auto';
+                    img.style.display = 'block';
+                    img.style.transition = 'transform 0.2s';
 
-                imageDiv.appendChild(img);
-                container.appendChild(imageDiv);
-            } else {
-                container.innerHTML += '<p>No roof imagery available</p>';
+                    let isZoomed = false;
+                    imgContainer.onclick = () => {
+                        if (!isZoomed) {
+                            img.style.transform = 'scale(2)';
+                            img.style.transformOrigin = 'top left';
+                            img.style.cursor = 'zoom-out';
+                            imgContainer.style.cursor = 'zoom-out';
+                            isZoomed = true;
+                        } else {
+                            img.style.transform = 'scale(1)';
+                            img.style.cursor = 'zoom-in';
+                            imgContainer.style.cursor = 'zoom-in';
+                            isZoomed = false;
+                        }
+                    };
+
+                    img.onload = () => {
+                        console.log(`Loaded ${layer.name || 'roof image'}`);
+                    };
+                    img.onerror = () => {
+                        console.warn('Failed to load imagery layer:', layer);
+                        img.style.display = 'none';
+                        const errorMsg = document.createElement('p');
+                        errorMsg.textContent = `Failed to load ${layer.name || 'imagery'}`;
+                        errorMsg.style.color = '#666';
+                        errorMsg.style.padding = '20px';
+                        imgContainer.appendChild(errorMsg);
+                    };
+
+                    imgContainer.appendChild(img);
+                    layerDiv.appendChild(imgContainer);
+
+                    const instruction = document.createElement('p');
+                    instruction.textContent = 'Click image to zoom in/out';
+                    instruction.style.fontSize = '12px';
+                    instruction.style.color = '#666';
+                    instruction.style.marginTop = '8px';
+                    instruction.style.textAlign = 'center';
+                    layerDiv.appendChild(instruction);
+
+                    container.appendChild(layerDiv);
+                }
+            });
+        }
+
+        async function downloadImage(imageUrl, filename) {
+            try {
+                const response = await fetch(`/api/convert-image?url=${encodeURIComponent(imageUrl)}`);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                addStatusMessage('Image downloaded successfully', 'success');
+            } catch (error) {
+                addStatusMessage('Failed to download image', 'error');
+                console.error('Download error:', error);
             }
         }
 
@@ -747,287 +788,20 @@
             document.getElementById('address-input').value = '';
             clearStatusMessages();
             currentResults = null;
-        }
+            selectedLocation = null;
 
-        async function getBuildingInsights(lat, lng) {
-            try {
-                const response = await fetch('/api/solar/building-insights', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ lat, lng })
-                });
-
-                const result = await response.json();
-
-                console.log('Building insights response:', {
-                    success: result.success,
-                    quality: result.quality,
-                    hasData: !!result.data,
-                    dataKeys: result.data ? Object.keys(result.data) : []
-                });
-
-                if (result.success && result.data) {
-                    addStatusMessage(`Found solar data (${result.quality} quality)`, 'success');
-                    return result.data;
-                } else {
-                    throw new Error(result.error || 'Failed to get building insights');
-                }
-            } catch (error) {
-                console.error('Building insights error:', error);
-                throw new Error(`Failed to get building insights: ${error.message}`);
-            }
-        }
-
-        async function getImageryData(lat, lng) {
-            try {
-                const response = await fetch('/api/solar/imagery', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ lat, lng })
-                });
-
-                const result = await response.json();
-
-                if (result.success && result.data) {
-                    return {
-                        rgbUrl: result.data.rgbUrl,
-                        annualFluxUrl: result.data.annualFluxUrl,
-                        maskUrl: result.data.maskUrl
-                    };
-                } else {
-                    console.warn('No imagery data available');
-                    return null;
-                }
-            } catch (error) {
-                console.error('Imagery error:', error);
-                return null;
-            }
-        }
-
-        // Google's EXACT implementation from documentation
-        function renderRGB(rgb, mask) {
-            const canvas = document.createElement('canvas');
-            canvas.width = mask ? mask.width : rgb.width;
-            canvas.height = mask ? mask.height : rgb.height;
-
-            const dw = rgb.width / canvas.width;
-            const dh = rgb.height / canvas.height;
-
-            const ctx = canvas.getContext('2d');
-            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-            for (let y = 0; y < canvas.height; y++) {
-                for (let x = 0; x < canvas.width; x++) {
-                    const rgbIdx = Math.floor(y * dh) * rgb.width + Math.floor(x * dw);
-                    const maskIdx = y * canvas.width + x;
-                    const imgIdx = y * canvas.width * 4 + x * 4;
-
-                    img.data[imgIdx + 0] = rgb.rasters[0][rgbIdx]; // Red
-                    img.data[imgIdx + 1] = rgb.rasters[1][rgbIdx]; // Green
-                    img.data[imgIdx + 2] = rgb.rasters[2][rgbIdx]; // Blue
-                    img.data[imgIdx + 3] = mask && mask.rasters && mask.rasters[0]
-                        ? mask.rasters[0][maskIdx] * 255
-                        : 255;
-                }
+            // Remove marker
+            if (marker) {
+                marker.setMap(null);
+                marker = null;
             }
 
-            ctx.putImageData(img, 0, 0);
-            return canvas;
-        }
+            // Hide map
+            document.getElementById('map').classList.remove('visible');
+            document.getElementById('map-instructions').classList.remove('visible');
 
-        function colorToRGB(color) {
-            const hex = color.startsWith('#') ? color.slice(1) : color;
-            return {
-                r: parseInt(hex.substring(0, 2), 16),
-                g: parseInt(hex.substring(2, 4), 16),
-                b: parseInt(hex.substring(4, 6), 16),
-            };
-        }
-
-        function normalize(x, max = 1, min = 0) {
-            const y = (x - min) / (max - min);
-            return clamp(y, 0, 1);
-        }
-
-        function lerp(x, y, t) {
-            return x + t * (y - x);
-        }
-
-        function clamp(x, min, max) {
-            return Math.min(Math.max(x, min), max);
-        }
-
-        function createPalette(hexColors) {
-            const rgb = hexColors.map(colorToRGB);
-            const size = 256;
-            const step = (rgb.length - 1) / (size - 1);
-            return Array(size)
-                .fill(0)
-                .map((_, i) => {
-                    const index = i * step;
-                    const lower = Math.floor(index);
-                    const upper = Math.ceil(index);
-                    return {
-                        r: lerp(rgb[lower].r, rgb[upper].r, index - lower),
-                        g: lerp(rgb[lower].g, rgb[upper].g, index - lower),
-                        b: lerp(rgb[lower].b, rgb[upper].b, index - lower),
-                    };
-                });
-        }
-
-        function renderPalette({ data, mask, colors, min, max, index }) {
-            const palette = createPalette(colors ?? ['000000', 'ffffff']);
-            const indices = data.rasters[index ?? 0]
-                .map((x) => normalize(x, max ?? 1, min ?? 0))
-                .map((x) => Math.round(x * (palette.length - 1)));
-            return renderRGB(
-                {
-                    ...data,
-                    rasters: [
-                        indices.map((i) => palette[i].r),
-                        indices.map((i) => palette[i].g),
-                        indices.map((i) => palette[i].b),
-                    ],
-                },
-                mask,
-            );
-        }
-
-        // Process GeoTIFF layers using Google's approach
-        async function processGeoTIFFLayers(imageryUrls, targetCanvas, targetCtx) {
-            if (!imageryUrls || imageryUrls.length === 0) {
-                const errorDiv = document.createElement('div');
-                errorDiv.textContent = 'No imagery data available';
-                targetCanvas.parentElement.appendChild(errorDiv);
-                return;
-            }
-
-            const layers = {};
-
-            // Process each layer
-            for (const layer of imageryUrls) {
-                try {
-                    const layerType = getLayerType(layer.name);
-                    console.log(`Processing ${layer.name} as ${layerType}`);
-
-                    const response = await fetch(`/api/process-geotiff?url=${encodeURIComponent(layer.imageUrl)}&layer=${layerType}`);
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        layers[layerType] = data;
-                        console.log(`Successfully processed ${layer.name}:`, data.width, 'x', data.height);
-                    } else {
-                        console.warn(`Failed to process ${layer.name}:`, data.error);
-                    }
-                } catch (error) {
-                    console.error(`Error processing ${layer.name}:`, error);
-                }
-            }
-
-            // Render using Google's functions
-            renderLayers(layers, targetCanvas, targetCtx);
-        }
-
-        function getLayerType(layerName) {
-            if (layerName.includes('RGB')) return 'rgb';
-            if (layerName.includes('Solar Flux') || layerName.includes('Annual')) return 'flux';
-            if (layerName.includes('Mask')) return 'mask';
-            return 'unknown';
-        }
-
-        function renderLayers(layers, targetCanvas, targetCtx) {
-            const container = targetCanvas.parentElement;
-
-            // Clear existing content except the title
-            while (container.children.length > 1) {
-                container.removeChild(container.lastChild);
-            }
-
-            console.log('Rendering layers using Google approach:', Object.keys(layers));
-
-            // Render RGB layer if available
-            if (layers.rgb) {
-                const rgbData = {
-                    width: layers.rgb.width,
-                    height: layers.rgb.height,
-                    rasters: [layers.rgb.data.red, layers.rgb.data.green, layers.rgb.data.blue]
-                };
-
-                const rgbCanvas = renderRGB(rgbData, undefined);
-
-                const rgbDiv = document.createElement('div');
-                rgbDiv.style.marginBottom = '20px';
-                const rgbTitle = document.createElement('h5');
-                rgbTitle.textContent = 'RGB Aerial Imagery';
-                rgbTitle.style.margin = '0 0 10px 0';
-                rgbDiv.appendChild(rgbTitle);
-                rgbDiv.appendChild(rgbCanvas);
-                container.appendChild(rgbDiv);
-            }
-
-            // Render Solar Flux layer if available
-            if (layers.flux) {
-                const fluxData = {
-                    width: layers.flux.width,
-                    height: layers.flux.height,
-                    rasters: [layers.flux.data]
-                };
-
-                const fluxCanvas = renderPalette({
-                    data: fluxData,
-                    colors: ['0000ff', '00ffff', 'ffff00', 'ff0000'],
-                    min: layers.flux.stats.min,
-                    max: layers.flux.stats.max,
-                    index: 0
-                });
-
-                const fluxDiv = document.createElement('div');
-                fluxDiv.style.marginBottom = '20px';
-                const fluxTitle = document.createElement('h5');
-                fluxTitle.textContent = `Annual Solar Flux (${layers.flux.stats.min.toFixed(0)} - ${layers.flux.stats.max.toFixed(0)} kWh/m²/year)`;
-                fluxTitle.style.margin = '0 0 10px 0';
-                fluxDiv.appendChild(fluxTitle);
-                fluxDiv.appendChild(fluxCanvas);
-                container.appendChild(fluxDiv);
-            }
-
-            // Render Roof Mask if available
-            if (layers.mask) {
-                const maskData = {
-                    width: layers.mask.width,
-                    height: layers.mask.height,
-                    rasters: [layers.mask.data]
-                };
-
-                const maskCanvas = renderPalette({
-                    data: maskData,
-                    colors: ['000000', 'ffffff'],
-                    min: 0,
-                    max: 1,
-                    index: 0
-                });
-
-                const maskDiv = document.createElement('div');
-                maskDiv.style.marginBottom = '20px';
-                const maskTitle = document.createElement('h5');
-                maskTitle.textContent = 'Roof Mask';
-                maskTitle.style.margin = '0 0 10px 0';
-                maskDiv.appendChild(maskTitle);
-                maskDiv.appendChild(maskCanvas);
-                container.appendChild(maskDiv);
-            }
-
-            // Hide the original target canvas
-            targetCanvas.style.display = 'none';
+            // Disable analyze button
+            document.getElementById('analyze-btn').disabled = true;
         }
     </script>
 
@@ -1035,16 +809,13 @@
         <div style="max-width: 800px; margin: 0 auto;">
             <h5 style="color: #666; font-size: 14px; margin-bottom: 10px;">Changelog</h5>
             <div style="font-size: 12px; color: #888; line-height: 1.4;">
-                <p><strong>v3.3</strong> (Latest) - Simplified to show only working roof imagery, added quality dropdown, set default Malaysian address</p>
-                <p><strong>v3.2</strong> - Implemented Google's EXACT Solar API specification with proper renderRGB and renderPalette functions</p>
-                <p><strong>v3.1</strong> - Created composite solar visualization combining RGB and flux layers into single image</p>
-                <p><strong>v3.0</strong> - Implemented Google's official renderRGB and renderPalette functions for proper GeoTIFF visualization</p>
+                <p><strong>v3.0</strong> (Latest) - Added interactive Google Maps with pinpoint location selection</p>
                 <p><strong>v2.1</strong> - Fixed imagery display for BASE quality data, Added proper expanded coverage support</p>
                 <p><strong>v2.0</strong> - Fixed expanded coverage API calls to use GET requests instead of POST</p>
                 <p><strong>v1.1</strong> - Added Malaysian address support with expanded coverage</p>
                 <p><strong>v1.0</strong> - Initial release with standard coverage support</p>
             </div>
-            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: v3.3-simple-roof-only)</p>
+            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-10-03 (Build: v3.0)</p>
         </div>
     </footer>
 </body>

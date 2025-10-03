@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solar Analysis Tool</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCrLcxkBYE1_Duo2hGsyzo3ir-nJm7OnkE&libraries=places"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -128,6 +129,29 @@
             100% { transform: rotate(360deg); }
         }
         .hidden { display: none; }
+        #map {
+            width: 100%;
+            height: 400px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        #map.visible {
+            display: block;
+        }
+        .map-instructions {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+        }
+        .map-instructions.visible {
+            display: block;
+        }
         @media (max-width: 768px) {
             .input-section {
                 grid-template-columns: 1fr;
@@ -152,18 +176,25 @@
                 <input type="number" id="panel-power" value="620" min="100" max="1000" />
             </div>
             <div class="input-group">
-                <label for="panel-width">Panel Width (mm)</label>
-                <input type="number" id="panel-width" value="1134" min="500" max="3000" step="1" />
+                <button id="search-btn" onclick="searchAddress()" style="width: 100%;">Search Address</button>
             </div>
         </div>
 
-        <div class="input-section">
+        <div id="map"></div>
+        <div id="map-instructions" class="map-instructions">
+            Click on the map to pinpoint the exact location for solar analysis
+        </div>
+
+        <div class="input-section" style="margin-top: 20px;">
+            <div class="input-group">
+                <label for="panel-width">Panel Width (mm)</label>
+                <input type="number" id="panel-width" value="1134" min="500" max="3000" step="1" />
+            </div>
             <div class="input-group">
                 <label for="panel-height">Panel Height (mm)</label>
                 <input type="number" id="panel-height" value="2278" min="500" max="3000" step="1" />
             </div>
-            <div></div>
-            <button id="analyze-btn" onclick="analyzeSolar()">Analyze Solar Potential</button>
+            <button id="analyze-btn" onclick="analyzeSolar()" disabled>Analyze Solar Potential</button>
         </div>
 
         <div id="status-messages"></div>
@@ -253,9 +284,112 @@
         const GOOGLE_API_KEY = 'AIzaSyCrLcxkBYE1_Duo2hGsyzo3ir-nJm7OnkE';
 
         let currentResults = null;
+        let map = null;
+        let marker = null;
+        let selectedLocation = null;
+        let geocoder = null;
+
+        function initMap() {
+            // Initialize map centered on a default location
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 3.139, lng: 101.6869 }, // Kuala Lumpur default
+                zoom: 15,
+                mapTypeId: 'satellite'
+            });
+
+            geocoder = new google.maps.Geocoder();
+
+            // Add click listener to map for pinpointing
+            map.addListener('click', function(event) {
+                placeMarker(event.latLng);
+            });
+        }
+
+        function placeMarker(location) {
+            // Remove existing marker if any
+            if (marker) {
+                marker.setMap(null);
+            }
+
+            // Create new marker
+            marker = new google.maps.Marker({
+                position: location,
+                map: map,
+                draggable: true,
+                title: 'Selected Location'
+            });
+
+            // Update selected location
+            selectedLocation = {
+                lat: location.lat(),
+                lng: location.lng()
+            };
+
+            // Enable analyze button
+            document.getElementById('analyze-btn').disabled = false;
+
+            // Add drag listener to marker
+            marker.addListener('dragend', function(event) {
+                selectedLocation = {
+                    lat: event.latLng.lat(),
+                    lng: event.latLng.lng()
+                };
+            });
+
+            addStatusMessage(`Location selected: ${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}`, 'success');
+        }
+
+        async function searchAddress() {
+            const address = document.getElementById('address-input').value.trim();
+
+            if (!address) {
+                addStatusMessage('Please enter an address', 'error');
+                return;
+            }
+
+            clearStatusMessages();
+            addStatusMessage('Searching for address...', 'info');
+
+            try {
+                const geocodeResult = await geocodeAddress(address);
+
+                if (!geocodeResult.success) {
+                    throw new Error(geocodeResult.error);
+                }
+
+                // Show map
+                const mapElement = document.getElementById('map');
+                const instructionsElement = document.getElementById('map-instructions');
+                mapElement.classList.add('visible');
+                instructionsElement.classList.add('visible');
+
+                // Initialize map if not already initialized
+                if (!map) {
+                    initMap();
+                }
+
+                // Center map on geocoded location
+                const location = new google.maps.LatLng(geocodeResult.lat, geocodeResult.lng);
+                map.setCenter(location);
+                map.setZoom(20);
+
+                // Place marker at geocoded location
+                placeMarker(location);
+
+                addStatusMessage(`Found: ${geocodeResult.formattedAddress}`, 'success');
+                addStatusMessage('Click on the map to adjust the pinpoint location', 'info');
+
+            } catch (error) {
+                addStatusMessage(`Error: ${error.message}`, 'error');
+            }
+        }
 
         async function analyzeSolar() {
-            const address = document.getElementById('address-input').value.trim();
+            if (!selectedLocation) {
+                addStatusMessage('Please search for an address and pinpoint a location on the map first', 'error');
+                return;
+            }
+
             const panelPower = parseFloat(document.getElementById('panel-power').value) || 620;
             const panelWidthMm = parseFloat(document.getElementById('panel-width').value) || 1134;
             const panelHeightMm = parseFloat(document.getElementById('panel-height').value) || 2278;
@@ -264,42 +398,33 @@
             const panelWidth = panelWidthMm / 1000;
             const panelHeight = panelHeightMm / 1000;
 
-            if (!address) {
-                addStatusMessage('Please enter an address', 'error');
-                return;
-            }
-
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('results').style.display = 'none';
             clearStatusMessages();
 
             try {
-                // Step 1: Geocode the address
-                addStatusMessage('Geocoding address...', 'info');
-                const geocodeResult = await geocodeAddress(address);
+                // Use the pinpointed coordinates
+                const lat = selectedLocation.lat;
+                const lng = selectedLocation.lng;
 
-                if (!geocodeResult.success) {
-                    throw new Error(geocodeResult.error);
-                }
+                addStatusMessage(`Using pinpointed coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`, 'info');
 
-                addStatusMessage(`Found coordinates: ${geocodeResult.lat}, ${geocodeResult.lng}`, 'success');
-
-                // Step 2: Get building insights
+                // Step 1: Get building insights
                 addStatusMessage('Analyzing building solar potential...', 'info');
-                const buildingInsights = await getBuildingInsights(geocodeResult.lat, geocodeResult.lng);
+                const buildingInsights = await getBuildingInsights(lat, lng);
 
-                // Step 3: Get imagery data
+                // Step 2: Get imagery data
                 addStatusMessage('Fetching roof imagery...', 'info');
-                const imageryData = await getImageryData(geocodeResult.lat, geocodeResult.lng);
+                const imageryData = await getImageryData(lat, lng);
 
-                // Step 4: Calculate results
+                // Step 3: Calculate results
                 const results = calculateSolarMetrics(buildingInsights, imageryData, {
                     panelPower,
                     panelWidth,
                     panelHeight,
-                    address: geocodeResult.formattedAddress,
-                    lat: geocodeResult.lat,
-                    lng: geocodeResult.lng
+                    address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                    lat: lat,
+                    lng: lng
                 });
 
                 displayResults(results);
@@ -579,6 +704,20 @@
             document.getElementById('address-input').value = '';
             clearStatusMessages();
             currentResults = null;
+            selectedLocation = null;
+
+            // Remove marker
+            if (marker) {
+                marker.setMap(null);
+                marker = null;
+            }
+
+            // Hide map
+            document.getElementById('map').classList.remove('visible');
+            document.getElementById('map-instructions').classList.remove('visible');
+
+            // Disable analyze button
+            document.getElementById('analyze-btn').disabled = true;
         }
     </script>
 
@@ -586,12 +725,13 @@
         <div style="max-width: 800px; margin: 0 auto;">
             <h5 style="color: #666; font-size: 14px; margin-bottom: 10px;">Changelog</h5>
             <div style="font-size: 12px; color: #888; line-height: 1.4;">
-                <p><strong>v2.1</strong> (Latest) - Fixed imagery display for BASE quality data, Added proper expanded coverage support</p>
+                <p><strong>v3.0</strong> (Latest) - Added interactive Google Maps with pinpoint location selection</p>
+                <p><strong>v2.1</strong> - Fixed imagery display for BASE quality data, Added proper expanded coverage support</p>
                 <p><strong>v2.0</strong> - Fixed expanded coverage API calls to use GET requests instead of POST</p>
                 <p><strong>v1.1</strong> - Added Malaysian address support with expanded coverage</p>
                 <p><strong>v1.0</strong> - Initial release with standard coverage support</p>
             </div>
-            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-09-29 (Build: db5de32)</p>
+            <p style="font-size: 11px; color: #aaa; margin-top: 10px;">Last updated: 2025-10-03 (Build: v3.0)</p>
         </div>
     </footer>
 </body>
